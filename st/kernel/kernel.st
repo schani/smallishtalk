@@ -235,6 +235,12 @@ Object subclass: #Delay
 	poolDictionaries: ''
 	category: 'Kernel'!
 
+Object subclass: #Profiler
+	instanceVariableNames: ''
+	classVariableNames: ''
+	poolDictionaries: ''
+	category: 'Kernel'!
+
 Object subclass: #ExRetryToken
 	instanceVariableNames: ''
 	classVariableNames: ''
@@ -1215,3 +1221,68 @@ showCr: aString
 	self show: aString.
 	self cr.
 	^self! !
+
+!Profiler class methodsFor: 'primitives'!
+primStart: intervalMs
+	<primitive: 420>
+	^self primitiveFailed: #primStart:!
+primStop
+	<primitive: 421>
+	^self primitiveFailed: #primStop!
+primReport
+	<primitive: 422>
+	^self primitiveFailed: #primReport!
+primCounters
+	<primitive: 424>
+	^self primitiveFailed: #primCounters!
+primCountersReset
+	<primitive: 425>
+	^self primitiveFailed: #primCountersReset!
+primGate: aBoolean
+	<primitive: 426>
+	^self primitiveFailed: #primGate:!
+primClockMs
+	<primitive: 320>
+	^self primitiveFailed: #primClockMs! !
+
+!Profiler class methodsFor: 'profiling'!
+spy: aBlock
+	^self spy: aBlock interval: 1!
+spy: aBlock interval: ms
+	| result |
+	self primStart: ms.
+	result := aBlock value.
+	self primStop.
+	self printReport: self primReport.
+	^result!
+counters
+	self primCounters do: [:row |
+		Transcript showCr: (row at: 1) , ' = ' , (row at: 2) printString].
+	^self!
+resetCounters
+	self primCountersReset.
+	^self!
+gate: aBoolean
+	self primGate: aBoolean.
+	^self!
+printReport: report
+	| total rows |
+	total := report at: 1.
+	Transcript showCr: 'Profile: ' , total printString , ' samples at ' , (report at: 2) printString , ' ms'.
+	total = 0 ifTrue: [^self].
+	Transcript showCr: ' self%  total%  name'.
+	rows := report at: 3.
+	rows do: [:row |
+		Transcript showCr: (self pad: (self percent: (row at: 2) of: total) to: 6)
+			, (self pad: (self percent: (row at: 3) of: total) to: 8)
+			, '  ' , (row at: 1)].
+	^self!
+percent: n of: total
+	| tenths |
+	tenths := n * 1000 // total.
+	^(tenths // 10) printString , '.' , (tenths \\ 10) printString , '%'!
+pad: aString to: n
+	| s |
+	s := aString.
+	[s size < n] whileTrue: [s := ' ' , s].
+	^s! !

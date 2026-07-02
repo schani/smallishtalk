@@ -89,7 +89,7 @@ fn run_image(image: &Path, config: VmConfig) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("load: {e:?}"))?;
     let active = vm.active_process;
     vm.run(active).map_err(|e| format!("run: {e:?}"))?;
-    Ok(vm.stdout_capture)
+    Ok(std::mem::take(&mut vm.stdout_capture))
 }
 
 fn check_corpus(config_for: impl Fn() -> VmConfig, mode: &str) {
@@ -147,6 +147,51 @@ fn corpus_gc_stress() {
         },
         "gc-stress",
     );
+}
+
+#[test]
+fn corpus_sampler_stress() {
+    // Walkability-contract enforcement (profiling plan §2): force a sample
+    // at EVERY safepoint poll, GC entry, and primitive dispatch across the
+    // whole corpus. Every walk must complete, every frame must symbolize,
+    // and the output must be unchanged.
+    let entries = corpus_entries();
+    let dir = std::env::temp_dir().join(format!("smallishtalk-samp-{}", std::process::id()));
+    let mut failures = Vec::new();
+    for (st, expected_path) in &entries {
+        let name = st.file_stem().unwrap().to_string_lossy().into_owned();
+        let image = dir.join(format!("{name}.im"));
+        build_image(st, &image);
+        let expected = std::fs::read(expected_path).unwrap();
+        let mut vm = match Vm::load_image(image.to_str().unwrap(), VmConfig::default()) {
+            Ok(vm) => vm,
+            Err(e) => {
+                failures.push(format!("{name}: load: {e:?}"));
+                continue;
+            }
+        };
+        vm.profiler.active = true;
+        vm.profiler.sample_every_poll = true;
+        let active = vm.active_process;
+        if let Err(e) = vm.run(active) {
+            failures.push(format!("{name}: VM error under sampling stress: {e:?}"));
+            continue;
+        }
+        if vm.stdout_capture != expected {
+            failures.push(format!("{name}: output diverged under sampling stress"));
+        }
+        if let Some(bad) = vm
+            .profiler
+            .names()
+            .iter()
+            .find(|n| n.contains("<invalid-frame>"))
+        {
+            failures.push(format!("{name}: unsymbolizable frame sampled: {bad}"));
+        }
+        assert!(vm.profiler.total_samples > 0, "{name}: no samples taken");
+    }
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(failures.is_empty(), "sampler stress failures:\n{}", failures.join("\n"));
 }
 
 #[test]

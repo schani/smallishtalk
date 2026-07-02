@@ -73,7 +73,7 @@ fn run_image_collect(image: &Path) -> Vec<u8> {
     let mut vm = Vm::load_image(image.to_str().unwrap(), VmConfig::default()).unwrap();
     let active = vm.active_process;
     vm.run_until_idle(active).unwrap();
-    vm.stdout_capture
+    std::mem::take(&mut vm.stdout_capture)
 }
 
 #[test]

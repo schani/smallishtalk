@@ -174,7 +174,7 @@ impl Vm {
             site_registry,
             lookup_cache: vec![LookupEntry::default(); LOOKUP_CACHE_SIZE],
             hash_counter: 0,
-            safepoint_flag: false,
+            safepoint: crate::profile::SafepointShared::new(),
             gc_epoch: 0,
             max_stack_bytes: config.max_stack_bytes,
             stdout_capture: Vec::new(),
@@ -188,6 +188,8 @@ impl Vm {
             snapshot_after_sends: None,
             sends_seen: 0,
             snapshot_fired_at_capture_len: None,
+            counters: crate::counters::Counters::new(),
+            profiler: crate::profile::Profiler::default(),
         })
     }
 }

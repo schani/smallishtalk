@@ -11,4 +11,21 @@ path = "src/lib.rs"
 name = "smallishtalk"
 path = "src/main.rs"
 
+[features]
+# The gated hot-path counter tier (per-opcode histogram, send counts,
+# poll-gap distribution). MEASURED (plan §3 validation, 2026-07-02): the
+# runtime gate — one predictable branch in the dispatch loop, even when
+# off — costs ~10% on the self-compile workload, so per the plan's decision
+# rule the gate lives at compile time: default builds carry no gate at all;
+# instruction-mix measurements use `--features vm-counters`. The always-on
+# counter tier measures as free (self-compile time is unchanged from the
+# pre-instrumentation binary).
+default = []
+vm-counters = []
+
+# Line tables in release builds so `perf` / flamegraphs symbolize the
+# interpreter (docs/profiling.md); does not change codegen.
+[profile.release]
+debug = "line-tables-only"
+
 [dependencies]

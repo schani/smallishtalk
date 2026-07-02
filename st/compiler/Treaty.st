@@ -783,6 +783,27 @@ primFlushCaches
 primFrameInfo
 	"primitives::PRIM_FRAME_INFO"
 	^410!
+primProfilerStart
+	"primitives::PRIM_PROFILER_START"
+	^420!
+primProfilerStop
+	"primitives::PRIM_PROFILER_STOP"
+	^421!
+primProfilerReport
+	"primitives::PRIM_PROFILER_REPORT"
+	^422!
+primProfilerTree
+	"primitives::PRIM_PROFILER_TREE"
+	^423!
+primVmCounters
+	"primitives::PRIM_VM_COUNTERS"
+	^424!
+primVmCountersReset
+	"primitives::PRIM_VM_COUNTERS_RESET"
+	^425!
+primProfilerGate
+	"primitives::PRIM_PROFILER_GATE"
+	^426!
 primTableSize
 	"primitives::PRIM_TABLE_SIZE"
 	^4096!

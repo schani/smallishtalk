@@ -53,6 +53,8 @@ bytes per §15; Symbol equality is identity, so `asString` copies;
 | `src/gc.rs` | §14 | Copying scavenger with age-based tenuring + SSB, and Lisp-2 sliding mark-compact for old space |
 | `src/image.rs` | §17 | STIM snapshot write / load with one-pass pointer relocation |
 | `src/fixture.rs` | §20 | The heap-builder fixture (`MethodBuilder`) for hand-assembled-bytecode tests |
+| `src/counters.rs` | plan §3 | Exact VM counters: always-on slow-path tier + gated hot-path tier (`SMALLISHTALK_STATS=1`, `SMALLISHTALK_GATE=1`) |
+| `src/profile.rs` | plan §2 | The sampling profiler: timer thread → safepoint samples, GC/prim pseudo-frames, epoch-keyed symbolization; driven from Smalltalk via `Profiler spy: [...]` (prims 420–426) |
 
 `cargo test` runs the whole Phase-1-style suite (137 tests): per-opcode
 interpreter tests, GC unit + stress tests, closure/NLR batteries, an
@@ -60,6 +62,11 @@ exception battery driven by a hand-assembled in-image exception kernel,
 process/scheduler tests, and snapshot round-trips that resume mid-method.
 
 The binary runs an image: `smallishtalk <image.im>`.
+
+**Profiling & benchmarks**: `make bench` runs the workload suite (median-of-5
+with a GST ratio column, history in `bench/history.csv`); `Profiler spy:
+[...]` profiles from inside any image. See `docs/profiling.md` and
+`docs/profiling-plan.md`.
 
 ## Documented v1 concretizations / deviations
 

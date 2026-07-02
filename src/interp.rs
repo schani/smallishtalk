@@ -152,6 +152,7 @@ impl Vm {
     /// The context switch (§13): store pc/frameOffset into the outgoing
     /// process, remember its (possibly old) stack, load the target's state.
     pub fn transfer_to(&mut self, regs: &mut Regs, target: Value) {
+        self.counters.process_switches += 1;
         let nil = self.nil();
         let cur = self.active_process;
         if cur.is_ptr() && cur != nil {
@@ -204,6 +205,15 @@ impl Vm {
             let b = ((word >> 16) & 0xFF) as u8;
             let c = (word >> 24) as u8;
             let d16 = (word >> 16) as u16;
+
+            // Gated counter tier (profiling plan §3): one predictable
+            // branch on the dispatch path, and only with the feature on.
+            #[cfg(feature = "vm-counters")]
+            if self.counters.gate {
+                self.counters.insns += 1;
+                self.counters.opcode_hist[op as usize] += 1;
+                self.counters.gap_current += 1;
+            }
 
             match op {
                 OP_NOP => {}
@@ -297,6 +307,7 @@ impl Vm {
                     } else if v != other {
                         // mustBeBoolean: send it, result replaces slot a,
                         // then the jump itself re-executes.
+                        self.counters.must_be_boolean += 1;
                         let jump_pc = regs.pc - 1;
                         regs.pc = jump_pc;
                         let sel = self.specials()[SPECIAL_SEL_MUST_BE_BOOLEAN];
@@ -594,6 +605,7 @@ impl Vm {
         dest: u8,
         operand_slots: &[u8],
     ) -> Result<(), VmError> {
+        self.counters.spec_fallthrough[specsel] += 1;
         let sels = self.specials()[SPECIAL_SPECIALIZED_SELECTORS];
         let selector = self.heap.slot(sels.as_ptr(), specsel);
         let vals: Vec<Value> = operand_slots.iter().map(|s| self.get(regs, *s)).collect();
@@ -609,6 +621,7 @@ impl Vm {
         selector: Value,
         recv_and_args: &[Value],
     ) -> Result<(), VmError> {
+        self.counters.sends_staged += 1;
         let fs = self.method_frame_slots(regs.method);
         // The callee's four control words land in bytecode slots r-4..r-1,
         // which must not overlap the frame's live slots: stage a full gap
@@ -652,6 +665,11 @@ impl Vm {
         let receiver = self.get(regs, r);
         let class_index = self.class_index_of(receiver);
 
+        #[cfg(feature = "vm-counters")]
+        if self.counters.gate {
+            self.counters.sends += 1;
+        }
+
         // Inline cache (only for plain sends; SENDSUPER's target is static
         // per receiver-class anyway and shares the same fields).
         if let Some(base) = site_base {
@@ -660,6 +678,7 @@ impl Vm {
                 let method = self.heap.slot(regs.sites, base + SITE_CACHE_METHOD);
                 return self.activate(regs, method, r, dest, argc);
             }
+            self.counters.inline_cache_miss += 1;
         }
 
         let looked_up = match super_static {
@@ -691,7 +710,11 @@ impl Vm {
         if e.class_index == class_index && e.selector == selector {
             return Some(e.method);
         }
-        let m = self.lookup_method(class_index, selector)?;
+        self.counters.global_cache_miss += 1;
+        self.counters.dict_walks += 1;
+        let (m, walked) = self.lookup_method_counted(class_index, selector);
+        self.counters.dict_classes_walked += walked;
+        let m = m?;
         self.lookup_cache[h] = crate::vm::LookupEntry {
             class_index,
             selector,
@@ -708,6 +731,7 @@ impl Vm {
         selector: Value,
         argc: usize,
     ) -> Result<(), VmError> {
+        self.counters.dnu += 1;
         // Build the Message object (allocated on this slow path only).
         let args_arr = self.alloc_gc(regs, CLASS_ARRAY, FMT_PTRS, argc)?;
         for i in 0..argc {
@@ -925,7 +949,17 @@ impl Vm {
     // --- Safepoints (§13) ---
 
     pub fn poll_safepoint(&mut self, regs: &mut Regs) -> Result<(), VmError> {
-        if self.safepoint_flag {
+        #[cfg(feature = "vm-counters")]
+        if self.counters.gate {
+            self.counters.record_gap();
+        }
+        // Stress/test mode: a sample at *every* poll (walkability contract
+        // enforcement, plan §2). Never set in production.
+        if self.profiler.sample_every_poll && self.profiler.active {
+            self.save_regs(regs);
+            self.take_sample(regs.stack, regs.frame, None);
+        }
+        if self.safepoint.armed.load(std::sync::atomic::Ordering::Relaxed) {
             self.save_regs(regs);
             self.service_safepoint(regs)?;
             self.refresh_regs(regs);
@@ -933,11 +967,18 @@ impl Vm {
         Ok(())
     }
 
-    /// Timer expiry and preemption checks (§13). The flag stays armed
-    /// while timers are pending (the poll is the v1 tick source).
+    /// Timer expiry, profiler samples, and preemption checks (§13). The
+    /// flag stays armed while timers are pending (the poll is the v1 tick
+    /// source); the profiler timer thread re-arms it on its own.
     fn service_safepoint(&mut self, regs: &mut Regs) -> Result<(), VmError> {
+        use std::sync::atomic::Ordering;
+        if self.safepoint.sample_due.swap(false, Ordering::Relaxed) && self.profiler.active {
+            self.take_sample(regs.stack, regs.frame, None);
+        }
         self.service_timers();
-        self.safepoint_flag = !self.timer_requests.is_empty();
+        self.safepoint
+            .armed
+            .store(!self.timer_requests.is_empty(), Ordering::Relaxed);
         let cur = self.active_process;
         let cur_prio = self.heap.slot(cur.as_ptr(), PROCESS_PRIORITY).as_int();
         if let Some(hp) = self.runnable_priority_ceiling() {
@@ -1008,6 +1049,7 @@ impl Vm {
     // --- Non-local return (§10) ---
 
     fn do_nlr(&mut self, regs: &mut Regs, a: u8) -> Result<(), VmError> {
+        self.counters.nlrs += 1;
         let value = self.get(regs, a);
         let closure = self.get(regs, 0); // block activation receiver
         let ca = closure.as_ptr();
@@ -1064,6 +1106,7 @@ impl Vm {
         target: usize,
         value: Value,
     ) -> Result<(), VmError> {
+        self.counters.unwind_runs += 1;
         loop {
             if regs.frame == target {
                 return self.do_return(regs, value);
@@ -1114,6 +1157,7 @@ impl Vm {
         hsb: usize,
         blockv: Value,
     ) -> Result<(), VmError> {
+        self.counters.ensure_interceptions += 1;
         let nil = self.nil();
         let target_serial = self
             .heap

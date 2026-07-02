@@ -26,6 +26,13 @@ impl Vm {
     /// Scavenge the young generation. Called at safepoints only (allocation
     /// sites; pc/frameOffset already saved to the active process).
     pub fn collect_young(&mut self) -> Result<(), VmError> {
+        // GC time attribution (plan §2): a due sample lands here with a
+        // pseudo-leaf over the triggering Smalltalk stack (regs were saved
+        // before every collection entry point).
+        if self.sample_due_here() {
+            self.take_sample_from_process("<vm:scavenge>");
+        }
+        let pause_start = std::time::Instant::now();
         self.gc_epoch += 1;
         self.scavenge_count += 1;
 
@@ -97,6 +104,8 @@ impl Vm {
 
         // --- Remembered set: scan old objects that may point young ---
         let ssb = std::mem::take(&mut self.heap.ssb);
+        self.counters.gc_ssb_drained += ssb.len() as u64;
+        self.counters.gc_ssb_drained_max = self.counters.gc_ssb_drained_max.max(ssb.len() as u64);
         for &obj in &ssb {
             self.scan_object(obj, &mut work, &mut tenured);
         }
@@ -132,6 +141,8 @@ impl Vm {
                     .set_header(obj, h.with_gc_bits(bits & !GC_BIT_REMEMBERED));
             }
         }
+        self.counters.gc_remembered_rebuilt += self.heap.ssb.len() as u64;
+        self.counters.scavenge_ns += pause_start.elapsed().as_nanos() as u64;
         Ok(())
     }
 
@@ -190,6 +201,10 @@ impl Vm {
         unsafe {
             std::ptr::copy_nonoverlapping(src as *const u64, start as *mut u64, total_words);
         }
+        self.counters.gc_bytes_copied += (total_words * 8) as u64;
+        if is_old {
+            self.counters.gc_bytes_tenured += (total_words * 8) as u64;
+        }
         let new_obj = start + extra * 8;
         // Fresh gcBits: keep immutable/pinned, stamp the age, clear
         // mark/remembered (the rebuild pass re-remembers as needed).
@@ -228,7 +243,13 @@ impl Vm {
     /// nil/true/false are the first (always live) old objects, so their
     /// addresses never change.
     pub fn collect_old(&mut self) -> Result<(), VmError> {
+        if self.sample_due_here() {
+            self.take_sample_from_process("<vm:compact>");
+        }
         self.collect_young()?;
+        // The pause clock starts after the scavenge — that time is already
+        // in scavenge_ns, so scavenge_ns + compact_ns is total GC time.
+        let pause_start = std::time::Instant::now();
         self.gc_epoch += 1;
         self.compact_count += 1;
         for e in self.lookup_cache.iter_mut() {
@@ -382,6 +403,7 @@ impl Vm {
                 old_alloc_words - new_top_words,
             );
         }
+        self.counters.compact_ns += pause_start.elapsed().as_nanos() as u64;
         Ok(())
     }
 

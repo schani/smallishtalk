@@ -180,6 +180,13 @@ pub struct Heap {
     /// bit set (they may contain young pointers). Drained by scavenge.
     pub ssb: Vec<usize>,
     pub config: HeapConfig,
+    // Mutator allocation counters (profiling plan §3, always-on tier).
+    // GC copies bypass these: they go through Space::alloc_words directly.
+    pub alloc_young_count: u64,
+    pub alloc_young_bytes: u64,
+    pub alloc_old_count: u64,
+    pub alloc_old_bytes: u64,
+    pub alloc_large_count: u64,
 }
 
 impl Heap {
@@ -190,6 +197,11 @@ impl Heap {
             old: Space::new(config.old_bytes),
             ssb: Vec::new(),
             config: config.clone(),
+            alloc_young_count: 0,
+            alloc_young_bytes: 0,
+            alloc_old_count: 0,
+            alloc_old_bytes: 0,
+            alloc_large_count: 0,
         }
     }
 
@@ -376,6 +388,26 @@ impl Heap {
         }
     }
 
+    /// Footprint in bytes of an allocation of `nslots` body slots
+    /// (header + overflow word when needed).
+    fn alloc_footprint(nslots: usize) -> u64 {
+        let extra = (nslots >= HDR_NSLOTS_OVERFLOW as usize) as usize;
+        ((extra + 1 + nslots) * 8) as u64
+    }
+
+    #[inline(always)]
+    fn count_young(&mut self, nslots: usize) {
+        self.alloc_young_count += 1;
+        self.alloc_young_bytes += Self::alloc_footprint(nslots);
+    }
+
+    #[inline(always)]
+    fn count_old(&mut self, nslots: usize, large: bool) {
+        self.alloc_old_count += 1;
+        self.alloc_old_bytes += Self::alloc_footprint(nslots);
+        self.alloc_large_count += large as u64;
+    }
+
     /// Allocate in young space, or old space directly for large objects.
     /// Returns None when young space is exhausted — the GC trigger.
     fn alloc_body(
@@ -385,9 +417,13 @@ impl Heap {
         nslots: usize,
     ) -> Option<usize> {
         if nslots * 8 > self.config.large_object_bytes {
-            Self::alloc_in(&mut self.old, class_index, format, nslots)
+            let obj = Self::alloc_in(&mut self.old, class_index, format, nslots)?;
+            self.count_old(nslots, true);
+            Some(obj)
         } else {
-            Self::alloc_in(&mut self.young_from, class_index, format, nslots)
+            let obj = Self::alloc_in(&mut self.young_from, class_index, format, nslots)?;
+            self.count_young(nslots);
+            Some(obj)
         }
     }
 
@@ -408,14 +444,19 @@ impl Heap {
         let nslots = byte_len.div_ceil(8);
         let pad = nslots * 8 - byte_len;
         if byte_len > self.config.large_object_bytes {
-            Self::alloc_in(&mut self.old, class_index, FMT_BYTES_BASE + pad as u64, nslots)
+            let obj =
+                Self::alloc_in(&mut self.old, class_index, FMT_BYTES_BASE + pad as u64, nslots)?;
+            self.count_old(nslots, true);
+            Some(obj)
         } else {
-            Self::alloc_in(
+            let obj = Self::alloc_in(
                 &mut self.young_from,
                 class_index,
                 FMT_BYTES_BASE + pad as u64,
                 nslots,
-            )
+            )?;
+            self.count_young(nslots);
+            Some(obj)
         }
     }
 
@@ -423,12 +464,14 @@ impl Heap {
     /// must-not-fail path, tenuring).
     pub fn alloc_fixed_old(&mut self, class_index: u32, nslots: usize, fill: Value) -> Option<usize> {
         let obj = Self::alloc_in(&mut self.old, class_index, FMT_FIXED, nslots)?;
+        self.count_old(nslots, false);
         self.fill_slots(obj, nslots, fill);
         Some(obj)
     }
 
     pub fn alloc_ptrs_old(&mut self, class_index: u32, nslots: usize, fill: Value) -> Option<usize> {
         let obj = Self::alloc_in(&mut self.old, class_index, FMT_PTRS, nslots)?;
+        self.count_old(nslots, false);
         self.fill_slots(obj, nslots, fill);
         Some(obj)
     }
@@ -436,6 +479,8 @@ impl Heap {
     pub fn alloc_bytes_old(&mut self, class_index: u32, byte_len: usize) -> Option<usize> {
         let nslots = byte_len.div_ceil(8);
         let pad = nslots * 8 - byte_len;
-        Self::alloc_in(&mut self.old, class_index, FMT_BYTES_BASE + pad as u64, nslots)
+        let obj = Self::alloc_in(&mut self.old, class_index, FMT_BYTES_BASE + pad as u64, nslots)?;
+        self.count_old(nslots, false);
+        Some(obj)
     }
 }

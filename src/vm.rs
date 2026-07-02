@@ -6,7 +6,9 @@
 //! long-lived structure (classes, methods, symbols) in old space, and
 //! in-flight multi-step allocations root temporaries in `temp_roots`.
 
+use crate::counters::Counters;
 use crate::heap::{Header, Heap, HeapConfig};
+use crate::profile::{Profiler, SafepointShared};
 use crate::treaty::*;
 use crate::value::Value;
 
@@ -64,7 +66,9 @@ pub struct Vm {
     pub site_registry: Vec<Value>,
     pub lookup_cache: Vec<LookupEntry>,
     pub hash_counter: u32,
-    pub safepoint_flag: bool,
+    /// Safepoint request flags, shared with the profiler timer thread.
+    /// The interpreter's poll is one relaxed atomic load.
+    pub safepoint: std::sync::Arc<SafepointShared>,
     /// Incremented by every collection; the interpreter reloads cached
     /// addresses when it observes a change.
     pub gc_epoch: u64,
@@ -85,6 +89,10 @@ pub struct Vm {
     pub snapshot_after_sends: Option<(u64, String)>,
     pub sends_seen: u64,
     pub snapshot_fired_at_capture_len: Option<usize>,
+    /// Exact VM counters (profiling plan §3).
+    pub counters: Counters,
+    /// The sampling profiler (profiling plan §2).
+    pub profiler: Profiler,
 }
 
 impl Vm {
@@ -99,7 +107,7 @@ impl Vm {
             site_registry: Vec::new(),
             lookup_cache: vec![LookupEntry::default(); LOOKUP_CACHE_SIZE],
             hash_counter: 0,
-            safepoint_flag: false,
+            safepoint: SafepointShared::new(),
             gc_epoch: 0,
             max_stack_bytes: config.max_stack_bytes,
             stdout_capture: Vec::new(),
@@ -113,6 +121,8 @@ impl Vm {
             snapshot_after_sends: None,
             sends_seen: 0,
             snapshot_fired_at_capture_len: None,
+            counters: Counters::new(),
+            profiler: Profiler::default(),
         };
         vm.bootstrap();
         vm
@@ -391,18 +401,30 @@ impl Vm {
 
     /// Slow-path lookup: walk method dictionaries up the superclass chain.
     pub fn lookup_method(&self, class_index: u32, selector: Value) -> Option<Value> {
+        self.lookup_method_counted(class_index, selector).0
+    }
+
+    /// Lookup that also reports how many classes the walk visited (for the
+    /// dict-walk counters).
+    pub fn lookup_method_counted(
+        &self,
+        class_index: u32,
+        selector: Value,
+    ) -> (Option<Value>, u64) {
         let nil = self.nil();
         let mut cls = self.class_table[class_index as usize];
+        let mut walked = 0u64;
         while cls != nil {
+            walked += 1;
             let mdict = self.heap.slot(cls.as_ptr(), BEHAVIOR_METHOD_DICTIONARY);
             if mdict != nil {
                 if let Some(m) = self.mdict_lookup(mdict, selector) {
-                    return Some(m);
+                    return (Some(m), walked);
                 }
             }
             cls = self.heap.slot(cls.as_ptr(), BEHAVIOR_SUPERCLASS);
         }
-        None
+        (None, walked)
     }
 
     /// Lookup starting *above* the given (static) class — SENDSUPER.
@@ -431,6 +453,7 @@ impl Vm {
     /// Install a method: grow the dictionary's parallel arrays, stamp
     /// selector/methodClass, flush caches eagerly (§8).
     pub fn install_method(&mut self, class: Value, selector: Value, method: Value) {
+        self.counters.method_installs += 1;
         let nil = self.nil();
         let mdict = self.heap.slot(class.as_ptr(), BEHAVIOR_METHOD_DICTIONARY);
         let keys = self.heap.slot(mdict.as_ptr(), MDICT_KEYS);
@@ -485,6 +508,7 @@ impl Vm {
     /// Eager invalidation (§8): empty the global lookup cache and clear
     /// every registered send-site's inline cache.
     pub fn flush_caches(&mut self) {
+        self.counters.cache_flushes += 1;
         for e in self.lookup_cache.iter_mut() {
             *e = LookupEntry::default();
         }

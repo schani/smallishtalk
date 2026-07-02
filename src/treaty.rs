@@ -358,6 +358,15 @@ pub const PRIM_REGISTER_CLASS: u16 = 401;
 pub const PRIM_METHOD_INSTALL: u16 = 402;
 pub const PRIM_FLUSH_CACHES: u16 = 403;
 pub const PRIM_FRAME_INFO: u16 = 410;
+/// Profiling band 420–439 (docs/profiling-plan.md §4).
+pub const PRIM_PROFILER_START: u16 = 420;
+pub const PRIM_PROFILER_STOP: u16 = 421;
+pub const PRIM_PROFILER_REPORT: u16 = 422;
+/// Reserved for the tree report (v1.5); unimplemented, fails cleanly.
+pub const PRIM_PROFILER_TREE: u16 = 423;
+pub const PRIM_VM_COUNTERS: u16 = 424;
+pub const PRIM_VM_COUNTERS_RESET: u16 = 425;
+pub const PRIM_PROFILER_GATE: u16 = 426;
 pub const PRIM_TABLE_SIZE: usize = 4096;
 
 // --- Image header (A.5) ---
@@ -530,7 +539,9 @@ pub fn all_constants() -> Vec<(&'static str, &'static str, u64)> {
             PRIM_CLOCK_MONOTONIC_MS, PRIM_CLOCK_WALL_MS, PRIM_SIGNAL_AT_MS,
             PRIM_NEXT_EVENT, PRIM_PIXEL_BLIT, PRIM_SNAPSHOT, PRIM_REGISTER_CLASS,
             PRIM_METHOD_INSTALL, PRIM_FLUSH_CACHES, PRIM_FRAME_INFO,
-            PRIM_TABLE_SIZE;
+            PRIM_PROFILER_START, PRIM_PROFILER_STOP, PRIM_PROFILER_REPORT,
+            PRIM_PROFILER_TREE, PRIM_VM_COUNTERS, PRIM_VM_COUNTERS_RESET,
+            PRIM_PROFILER_GATE, PRIM_TABLE_SIZE;
         "image_header": IMG_MAGIC_OFFSET, IMG_VERSION_OFFSET, IMG_FLAGS_OFFSET,
             IMG_SAVED_BASE_OFFSET, IMG_OLD_SPACE_SIZE_OFFSET,
             IMG_SPECIAL_OBJECTS_OFFSET, IMG_CLASS_LIST_OFFSET,

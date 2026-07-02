@@ -15,6 +15,12 @@ fn main() {
             std::process::exit(1);
         }
     };
+    // SMALLISHTALK_STATS=1 dumps the counter table on exit (via Drop);
+    // SMALLISHTALK_GATE=1 additionally enables the gated hot-path tier
+    // (per-opcode histogram, send counts) without image cooperation.
+    if std::env::var_os("SMALLISHTALK_GATE").is_some_and(|v| v == "1") {
+        vm.counters.gate = true;
+    }
     let active = vm.active_process;
     match vm.run(active) {
         Ok(_) => {}

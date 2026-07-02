@@ -31,6 +31,29 @@ impl Vm {
         argc: usize,
         dest: u8,
     ) -> Result<PrimOutcome, VmError> {
+        self.counters.prim_calls[n as usize] += 1;
+        // Attribute long-primitive time (plan §2): if a sample came due
+        // while native code runs, take it here with a pseudo-leaf on top
+        // of the live Smalltalk stack.
+        if self.sample_due_here() {
+            let leaf = format!("<vm:prim:{n}>");
+            self.take_sample(regs.stack, regs.frame, Some(&leaf));
+        }
+        let outcome = self.dispatch_primitive(n, regs, r, argc, dest);
+        if let Ok(PrimOutcome::Fail(_)) = outcome {
+            self.counters.prim_fails[n as usize] += 1;
+        }
+        outcome
+    }
+
+    fn dispatch_primitive(
+        &mut self,
+        n: u16,
+        regs: &mut Regs,
+        r: u8,
+        argc: usize,
+        dest: u8,
+    ) -> Result<PrimOutcome, VmError> {
         match n {
             PRIM_BLOCK_VALUE_0 | PRIM_BLOCK_VALUE_1 | PRIM_BLOCK_VALUE_2
             | PRIM_BLOCK_VALUE_3 | PRIM_BLOCK_VALUE_4 => {
@@ -55,7 +78,9 @@ impl Vm {
                     return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
                 }
                 self.timer_requests.push((ms.as_int(), sem));
-                self.safepoint_flag = true;
+                self.safepoint
+                    .armed
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
                 Ok(PrimOutcome::Value(self.get(regs, r)))
             }
             PRIM_FIND_HANDLER => self.prim_find_handler(regs, r),
@@ -315,6 +340,37 @@ impl Vm {
                 Ok(PrimOutcome::Value(self.get(regs, r)))
             }
             PRIM_FRAME_INFO => self.prim_frame_info(regs, r),
+
+            // --- Profiling band 420–439 (docs/profiling-plan.md §4) ---
+            PRIM_PROFILER_START => {
+                let ms = self.get(regs, r + 1);
+                if !ms.is_int() || ms.as_int() < 1 {
+                    return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+                }
+                self.profiler_start(ms.as_int() as u64);
+                Ok(PrimOutcome::Value(self.get(regs, r)))
+            }
+            PRIM_PROFILER_STOP => {
+                self.profiler_stop();
+                Ok(PrimOutcome::Value(self.get(regs, r)))
+            }
+            PRIM_PROFILER_REPORT => self.prim_profiler_report(regs),
+            PRIM_VM_COUNTERS => self.prim_vm_counters(regs),
+            PRIM_VM_COUNTERS_RESET => {
+                self.reset_counters();
+                Ok(PrimOutcome::Value(self.get(regs, r)))
+            }
+            PRIM_PROFILER_GATE => {
+                let b = self.get(regs, r + 1);
+                if b == self.true_v() {
+                    self.counters.gate = true;
+                } else if b == self.false_v() {
+                    self.counters.gate = false;
+                } else {
+                    return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+                }
+                Ok(PrimOutcome::Value(self.get(regs, r)))
+            }
 
             _ => Ok(PrimOutcome::Fail(FAIL_UNKNOWN_PRIM)),
         }
@@ -905,6 +961,7 @@ impl Vm {
             return Ok(PrimOutcome::Value(sem));
         }
         // Block: enqueue on the semaphore, run someone else.
+        self.counters.semaphore_blocks += 1;
         let cur = self.active_process;
         self.save_regs(regs);
         self.enqueue_process(sem, SEMAPHORE_QUEUE_HEAD, SEMAPHORE_QUEUE_TAIL, cur);
@@ -1309,6 +1366,83 @@ impl Vm {
         self.heap
             .set_slot_raw(a, 1, Value::from_int(flags.as_int() >> SERIAL_SHIFT));
         Ok(PrimOutcome::Value(arr))
+    }
+
+    // --- Profiling primitives (plan §4) ---
+
+    fn alloc_string_gc(&mut self, regs: &mut Regs, s: &str) -> Result<Value, VmError> {
+        let v = self.alloc_gc(regs, CLASS_BYTESTRING, FMT_BYTES_BASE, s.len())?;
+        self.heap.write_bytes(v.as_ptr(), s.as_bytes());
+        Ok(v)
+    }
+
+    /// primProfilerReport → `{totalSamples. intervalMs. rows}` where rows
+    /// is an Array of `{name. selfSamples. totalSamples}`, pre-sorted by
+    /// self-samples descending (the image just prints them).
+    fn prim_profiler_report(&mut self, regs: &mut Regs) -> Result<PrimOutcome, VmError> {
+        let rows = self.profiler_report_rows();
+        let total = self.profiler.total_samples as i64;
+        let interval = self.profiler.interval_ms as i64;
+        let data: Vec<(String, i64, i64)> = rows
+            .into_iter()
+            .map(|(n, s, t)| (n, s as i64, t as i64))
+            .collect();
+        self.build_row_array(regs, total, interval, &data)
+    }
+
+    /// primVmCounters → Array of `{name. value}` rows.
+    fn prim_vm_counters(&mut self, regs: &mut Regs) -> Result<PrimOutcome, VmError> {
+        let rows = self.counter_rows();
+        let rows_arr = self.alloc_gc(regs, CLASS_ARRAY, FMT_PTRS, rows.len())?;
+        self.temp_roots.push(rows_arr);
+        let base = self.temp_roots.len() - 1;
+        for (i, (name, v)) in rows.iter().enumerate() {
+            let name_v = self.alloc_string_gc(regs, name)?;
+            self.temp_roots.push(name_v);
+            let row = self.alloc_gc(regs, CLASS_ARRAY, FMT_PTRS, 2)?;
+            let name_v = self.temp_roots.pop().unwrap();
+            self.store_slot(row.as_ptr(), 0, name_v);
+            self.heap
+                .set_slot_raw(row.as_ptr(), 1, Value::from_int(*v as i64));
+            let rows_arr = self.temp_roots[base];
+            self.store_slot(rows_arr.as_ptr(), i, row);
+        }
+        let rows_arr = self.temp_roots.pop().unwrap();
+        debug_assert_eq!(self.temp_roots.len(), base);
+        Ok(PrimOutcome::Value(rows_arr))
+    }
+
+    /// Materialize `{total. interval. Array of {name. a. b}}` as heap
+    /// arrays, rooting in-flight values across every allocation.
+    fn build_row_array(
+        &mut self,
+        regs: &mut Regs,
+        total: i64,
+        interval: i64,
+        data: &[(String, i64, i64)],
+    ) -> Result<PrimOutcome, VmError> {
+        let rows_arr = self.alloc_gc(regs, CLASS_ARRAY, FMT_PTRS, data.len())?;
+        self.temp_roots.push(rows_arr);
+        let base = self.temp_roots.len() - 1;
+        for (i, (name, a, b)) in data.iter().enumerate() {
+            let name_v = self.alloc_string_gc(regs, name)?;
+            self.temp_roots.push(name_v);
+            let row = self.alloc_gc(regs, CLASS_ARRAY, FMT_PTRS, 3)?;
+            let name_v = self.temp_roots.pop().unwrap();
+            self.store_slot(row.as_ptr(), 0, name_v);
+            self.heap.set_slot_raw(row.as_ptr(), 1, Value::from_int(*a));
+            self.heap.set_slot_raw(row.as_ptr(), 2, Value::from_int(*b));
+            let rows_arr = self.temp_roots[base];
+            self.store_slot(rows_arr.as_ptr(), i, row);
+        }
+        let outer = self.alloc_gc(regs, CLASS_ARRAY, FMT_PTRS, 3)?;
+        let rows_arr = self.temp_roots.pop().unwrap();
+        debug_assert_eq!(self.temp_roots.len(), base);
+        self.heap.set_slot_raw(outer.as_ptr(), 0, Value::from_int(total));
+        self.heap
+            .set_slot_raw(outer.as_ptr(), 1, Value::from_int(interval));
+        self.store_slot(outer.as_ptr(), 2, rows_arr);
+        Ok(PrimOutcome::Value(outer))
     }
 
     /// BlockClosure>>value... — activate the block: push a frame whose
