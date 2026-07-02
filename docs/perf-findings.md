@@ -170,6 +170,29 @@ structure).
   is now ~39% of self time, concentrated under `StLexer>>scan` (21%
   total) and `WriteStream>>nextPut:` (5.8% total).
 
+- **2026-07-02, finding 3 fixed + Unicode support** (byte-level lexer and
+  chunk reader: both scan integer bytes via `Platform bytesOf:`; token
+  strings are built by span-slicing / `StByteBuf` over the portable
+  `byteAt:put:`; `$`-literals decode one fully-validated UTF-8 scalar
+  into an `StCharCode` — code points travel as SmallIntegers end to end,
+  never as host Characters, which GST's `Character`/`UnicodeCharacter`
+  split would make host-divergent. Kernel: exact-class tests replace
+  `isKindOf:` in `WriteStream>>nextPut:` and `Character>>=`, `String>>=`
+  gets the `isString` flag + size hoist, and `Character value:` interns
+  0–255 in a lazy `CharTable`): self-compile **1167 → 820 ms (−30%)**,
+  ratio vs GST **2.75× → 2.01×**. Acceptance criteria all met:
+  `prim.calls.4` 670 k → 98 k, young allocations 1.01 M → 0.43 M, total
+  sends 22.1 M → 12.5 M, `=` fallthroughs 1.68 M → 1.02 M;
+  `Character>>=`, `charAt:`, `Character value:`, `isLetterChar:` all
+  left the profile. New top: `do:` 21.4% self / 88.6% total (finding 2's
+  remainder — the `at:` staged send + block activation per element),
+  `String>>=` 11.2% (now mostly `findClass`/name compares),
+  `OrderedCollection>>grow` 4.4%. Unicode: corpus 020 exercises UTF-8
+  strings/symbols/comments and 2/3/4-byte `$`-literals through both
+  pipelines; lexer SUnit tests cover malformed sequences; a guard test
+  keeps the compiler's own sources ASCII in `$`-literals (GST native
+  file-in limit).
+
 ## Recommended attack order
 
 1. Hash the symbol table / `Symbol class>>intern:` (finding 1) —

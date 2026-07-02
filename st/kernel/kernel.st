@@ -336,6 +336,9 @@ isKindOf: aClass
 	[c isNil] whileFalse: [
 		c == aClass ifTrue: [^true].
 		c := c superclass].
+	^false!
+isString
+	"flag method: one monomorphic send instead of an isKindOf: chain walk"
 	^false! !
 
 !Object methodsFor: 'printing'!
@@ -635,9 +638,17 @@ species
 !String methodsFor: 'accessing'!
 asString
 	^self!
+isString
+	^true!
 charAt: i
 	"the Character layer over byte-indexed at: (§15)"
 	^Character value: (self at: i)!
+byteAt: i
+	"portable byte access (§15: at: answers bytes on the VM; the GST-side
+	 shim lives in Compat.st)"
+	^self at: i!
+byteAt: i put: b
+	^self at: i put: b!
 species
 	^String! !
 
@@ -656,12 +667,13 @@ species
 		j := j + 1].
 	^r!
 = other
-	| i |
+	| i n |
 	other isNil ifTrue: [^false].
-	(other isKindOf: String) ifFalse: [^false].
-	self size = other size ifFalse: [^false].
+	other isString ifFalse: [^false].
+	n := self size.
+	n = other size ifFalse: [^false].
 	i := 1.
-	[i <= self size] whileTrue: [
+	[i <= n] whileTrue: [
 		(self at: i) = (other at: i) ifFalse: [^false].
 		i := i + 1].
 	^true!
@@ -765,10 +777,24 @@ asSymbol
 
 !Character class methodsFor: 'creation'!
 value: anInteger
-	| c |
-	c := self new.
-	c setCodePoint: anInteger.
-	^c! !
+	"characters 0-255 are interned in the lazily-built CharTable global;
+	 higher code points (Unicode scalars, any SmallInteger) allocate"
+	| t c |
+	(anInteger >= 0 and: [anInteger <= 255]) ifFalse: [
+		c := self new.
+		c setCodePoint: anInteger.
+		^c].
+	t := CharTable.
+	t isNil ifTrue: [t := Array new: 256. CharTable := t].
+	c := t at: anInteger + 1.
+	c isNil ifTrue: [
+		c := self new.
+		c setCodePoint: anInteger.
+		t at: anInteger + 1 put: c].
+	^c!
+codePoint: anInteger
+	"alias (GST parity): any Unicode scalar"
+	^self value: anInteger! !
 
 !Character methodsFor: 'accessing'!
 setCodePoint: anInteger
@@ -776,7 +802,7 @@ setCodePoint: anInteger
 value
 	^codePoint!
 = other
-	^(other isKindOf: Character) and: [codePoint = other value]!
+	^other class == Character and: [codePoint = other value]!
 hash
 	^codePoint! !
 
@@ -966,7 +992,7 @@ nextPut: x
 	pos = target size ifTrue: [self growTarget].
 	pos := pos + 1.
 	v := x.
-	(x isKindOf: Character) ifTrue: [v := x value].
+	x class == Character ifTrue: [v := x value].
 	target at: pos put: v.
 	^x!
 nextPutAll: aCollection

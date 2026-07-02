@@ -2,9 +2,37 @@
  and the code generator. Every node prints a canonical s-expression via
  #sexp — the structural-equality representation the tests compare.
 
- Literal values are host objects: Integer, String, Symbol, Character,
- Boolean, nil, Array (of literal values), ByteArray-as-Array-of-integers
- tagged by StLiteralNode kind."
+ Literal values are host objects: Integer, String, Symbol, Boolean, nil,
+ Array (of literal values), ByteArray-as-Array-of-integers tagged by
+ StLiteralNode kind - and StCharCode for character literals: the code
+ point travels as a SmallInteger end to end, never as a host Character
+ (GST's Character/UnicodeCharacter split and its equality semantics
+ differ from the self-hosted kernel's; integers are host-identical)."
+
+Object subclass: #StCharCode
+	instanceVariableNames: 'code'
+	classVariableNames: ''
+	poolDictionaries: ''
+	category: 'Smallishtalk-Compiler'!
+
+!StCharCode class methodsFor: 'instance creation'!
+code: anInteger
+	| c |
+	c := self new.
+	c setCode: anInteger.
+	^c! !
+
+!StCharCode methodsFor: 'accessing'!
+setCode: anInteger
+	code := anInteger!
+code
+	^code!
+= other
+	^(other isKindOf: StCharCode) and: [code = other code]!
+hash
+	^code!
+printOn: aStream
+	aStream nextPutAll: '$<' , code printString , '>'! !
 
 Object subclass: #StNode
 	instanceVariableNames: ''
@@ -132,7 +160,10 @@ printValue: v
 	(v isKindOf: Integer) ifTrue: [^v printString].
 	(v isKindOf: Symbol) ifTrue: [^'#' , v].
 	(v isKindOf: String) ifTrue: [^'''' , v , ''''].
-	(v isKindOf: Character) ifTrue: [^'$' , (String with: v)].
+	(v isKindOf: StCharCode) ifTrue: [
+		(v code >= 32 and: [v code <= 126])
+			ifTrue: [^'$' , (String with: (Character value: v code))]
+			ifFalse: [^'$<' , v code printString , '>']].
 	(v isKindOf: Array) ifTrue: [
 		| ws |
 		ws := WriteStream on: String new.

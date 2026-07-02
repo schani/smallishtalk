@@ -34,10 +34,22 @@ with tests holding all three together.
    third-generation image running correctly.
 
 The portable-dialect divergences between GST and the self-hosted kernel
-are confined to `st/compiler/Compat.st` (GST side: `charAt:`,
-`Platform bytesOf:`) and documented conventions (`String at:` answers
-bytes per §15; Symbol equality is identity, so `asString` copies;
-`Array =` is elementwise; class-side `super` sites bind the metaclass).
+are confined to `st/compiler/Compat.st` (GST side: `charAt:`, `byteAt:`,
+`byteAt:put:`, `Platform bytesOf:`) and documented conventions
+(`String at:` answers bytes per §15; Symbol equality is identity, so
+`asString` copies; `Array =` is elementwise; class-side `super` sites
+bind the metaclass).
+
+**Unicode**: source is UTF-8. The compiler's lexer and chunk reader scan
+integer bytes (never host Characters — GST's `Character` vs
+`UnicodeCharacter` split and its equality semantics differ from ours), so
+string literals, quoted symbols and comments preserve their bytes
+verbatim on both hosts; `String size` is a byte count. A `$`-literal
+decodes exactly one UTF-8 scalar (full validation: overlongs,
+surrogates, range, truncation) and travels through the compiler as an
+`StCharCode` integer; the target kernel's `Character` holds any scalar.
+The compiler's *own* sources keep `$`-literals ASCII (GST's native
+file-in requires it; `tests/portability_guard_test.rs` enforces it).
 
 ## What's here
 

@@ -17,6 +17,15 @@ events: aString
 	^StChunkReader eventsFrom: aString! !
 
 !StChunkReaderTests methodsFor: 'tests'!
+testUnicodeChunkPassthrough
+	"UTF-8 content passes through chunks byte-for-byte (the scanner only
+	 acts on ASCII bytes, which UTF-8 continuations never collide with)"
+	| src ev |
+	src := '"✓ comment" Transcript showCr: ''héllo 😀'''.
+	ev := self events: src , self bang.
+	self assert: ((ev at: 1) at: 1) = #doIt.
+	self assert: ((ev at: 1) at: 2) = src!
+
 testDoItChunks
 	| evs |
 	evs := self events: 'Transcript show: 1 printString', self bang, ' 3 + 4', self bang.

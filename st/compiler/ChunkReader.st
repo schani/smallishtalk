@@ -2,13 +2,17 @@
  files into a neutral event list, so the same source files drive both the
  GST cross-compiler and (phase 5) the in-image loader.
 
+ Like the lexer, the scan runs over integer bytes (Platform bytesOf:) —
+ all boundary decisions are ASCII byte compares, so UTF-8 content passes
+ through chunks untouched on both hosts.
+
  Events (Arrays):
    (#doIt sourceString)
    (#methods className isMeta category (methodSource...))
  A chunk is text up to an unescaped $!; doubled !! is a literal !."
 
 Object subclass: #StChunkReader
-	instanceVariableNames: 'source pos'
+	instanceVariableNames: 'source bytes pos'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'Smallishtalk-Compiler'!
@@ -23,79 +27,81 @@ eventsFrom: aString
 !StChunkReader methodsFor: 'private'!
 setSource: aString
 	source := aString.
+	bytes := Platform bytesOf: aString.
 	pos := 1!
 
 atEnd
-	^pos > source size!
+	^pos > bytes size!
 
 skipSeparators
-	[self atEnd not and: [self isSeparator: (source charAt: pos)]]
+	[self atEnd not and: [self isSeparator: (bytes at: pos)]]
 		whileTrue: [pos := pos + 1]!
 
-isSeparator: c
-	^c value = 32 or: [c value = 9 or: [c value = 10 or: [c value = 13 or: [c value = 12]]]]!
+isSeparator: b
+	^b = 32 or: [b = 9 or: [b = 10 or: [b = 13 or: [b = 12]]]]!
 
 nextChunk
 	"text up to an unescaped bang. The scan is comment-, string- and
 	 character-literal-aware (bangs inside them do not terminate), and a
 	 doubled bang collapses to one — matching GST file-in."
-	| ws c |
-	ws := WriteStream on: String new.
+	| ws b |
+	ws := StByteBuf new: 64.
 	[self atEnd] whileFalse: [
-		c := source charAt: pos.
+		b := bytes at: pos.
 		pos := pos + 1.
-		c = $$
+		b = 36 "$"
 			ifTrue: [
-				ws nextPut: c.
+				ws addByte: b.
 				self atEnd ifFalse: [
-					ws nextPut: (source charAt: pos).
+					ws addByte: (bytes at: pos).
 					pos := pos + 1]]
 			ifFalse: [
-			c = $"
-				ifTrue: [ws nextPut: c. self copyCommentInto: ws]
+			b = 34 "double quote"
+				ifTrue: [ws addByte: b. self copyCommentInto: ws]
 				ifFalse: [
-				c = $'
-					ifTrue: [ws nextPut: c. self copyStringInto: ws]
+				b = 39 "'"
+					ifTrue: [ws addByte: b. self copyStringInto: ws]
 					ifFalse: [
-					c = $!
+					b = 33 "!"
 						ifTrue: [
-							(self atEnd not and: [(source charAt: pos) = $!])
-								ifTrue: [ws nextPut: $!. pos := pos + 1]
+							(self atEnd not and: [(bytes at: pos) = 33])
+								ifTrue: [ws addByte: 33. pos := pos + 1]
 								ifFalse: [^ws contents]]
-						ifFalse: [ws nextPut: c]]]]].
+						ifFalse: [ws addByte: b]]]]].
 	^ws contents!
 
 copyCommentInto: ws
 	"the opening quote is already copied; copy through the closing one
 	 (doubled quotes stay inside)"
-	| c |
+	| b |
 	[self atEnd] whileFalse: [
-		c := source charAt: pos.
+		b := bytes at: pos.
 		pos := pos + 1.
-		ws nextPut: c.
-		c = $" ifTrue: [
-			(self atEnd not and: [(source charAt: pos) = $"])
-				ifTrue: [ws nextPut: $". pos := pos + 1]
+		ws addByte: b.
+		b = 34 ifTrue: [
+			(self atEnd not and: [(bytes at: pos) = 34])
+				ifTrue: [ws addByte: 34. pos := pos + 1]
 				ifFalse: [^self]]].
 	^self!
 
 copyStringInto: ws
-	| c |
+	| b |
 	[self atEnd] whileFalse: [
-		c := source charAt: pos.
+		b := bytes at: pos.
 		pos := pos + 1.
-		ws nextPut: c.
-		c = $' ifTrue: [
-			(self atEnd not and: [(source charAt: pos) = $'])
-				ifTrue: [ws nextPut: $'. pos := pos + 1]
+		ws addByte: b.
+		b = 39 ifTrue: [
+			(self atEnd not and: [(bytes at: pos) = 39])
+				ifTrue: [ws addByte: 39. pos := pos + 1]
 				ifFalse: [^self]]].
 	^self!
 
 isEmptyChunk: aString
-	| k |
+	| bs k |
+	bs := Platform bytesOf: aString.
 	k := 1.
-	[k <= aString size] whileTrue: [
-		(self isSeparator: (aString charAt: k)) ifFalse: [^false].
+	[k <= bs size] whileTrue: [
+		(self isSeparator: (bs at: k)) ifFalse: [^false].
 		k := k + 1].
 	^true!
 
@@ -123,7 +129,7 @@ events
 	events := OrderedCollection new.
 	[self skipSeparators.
 	 self atEnd] whileFalse: [
-		(source charAt: pos) = $!
+		(bytes at: pos) = 33 "!"
 			ifTrue: [
 				pos := pos + 1.
 				self skipSeparators.

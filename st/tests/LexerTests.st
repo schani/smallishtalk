@@ -52,11 +52,13 @@ testStrings
 	self assert: (toks at: 2) value = 'it''s'!
 
 testCharacters
+	"character tokens carry StCharCode (integer code points), never host
+	 Character objects"
 	| toks |
 	toks := StLexer tokenize: '$a $  $$'.
-	self assert: (toks at: 1) value = $a.
-	self assert: (toks at: 2) value = $ .
-	self assert: (toks at: 3) value = $$!
+	self assert: (toks at: 1) value code = 97.
+	self assert: (toks at: 2) value code = 32.
+	self assert: (toks at: 3) value code = 36!
 
 testSymbols
 	| toks |
@@ -81,4 +83,48 @@ testPunctuation
 
 testHashForms
 	self assert: (self typesOf: '#( #[')
-		= 'hashParen hashBracket eof'! !
+		= 'hashParen hashBracket eof'!
+
+testUnicodeCharacterLiterals
+	"2-, 3- and 4-byte UTF-8 sequences decode to their scalars"
+	| toks |
+	toks := StLexer tokenize: '$é $✓ $😀'.
+	self assert: (toks at: 1) value code = 233.
+	self assert: (toks at: 2) value code = 10003.
+	self assert: (toks at: 3) value code = 128512!
+
+testUnicodeStringPassthrough
+	"string literals preserve source UTF-8 bytes verbatim (byte count!)"
+	| toks v |
+	toks := StLexer tokenize: '''héllo'''.
+	v := (toks at: 1) value.
+	self assert: v size = 6.
+	self assert: (v byteAt: 2) = 195.
+	self assert: (v byteAt: 3) = 169!
+
+testUnicodeSymbolAndComment
+	"UTF-8 passes through quoted symbols and comments untouched"
+	| toks |
+	toks := StLexer tokenize: '"café comment" #''s✓'''.
+	self assert: (toks at: 1) type = #symbol.
+	self assert: (toks at: 1) value size = 4!
+
+malformedChar: byteList
+	"build '$' followed by the given raw bytes and tokenize it"
+	| s |
+	s := String new: byteList size + 1.
+	s byteAt: 1 put: 36.
+	1 to: byteList size do: [:k | s byteAt: k + 1 put: (byteList at: k)].
+	^StLexer tokenize: s!
+
+testMalformedUtf8CharacterLiterals
+	"full scalar validation: continuation lead, overlongs, surrogates,
+	 out of range, truncation, bad continuation byte"
+	self should: [self malformedChar: #(128)] raise: Error.
+	self should: [self malformedChar: #(192 128)] raise: Error.
+	self should: [self malformedChar: #(224 128 128)] raise: Error.
+	self should: [self malformedChar: #(237 160 128)] raise: Error.
+	self should: [self malformedChar: #(244 144 128 128)] raise: Error.
+	self should: [self malformedChar: #(195)] raise: Error.
+	self should: [self malformedChar: #(195 65)] raise: Error.
+	self should: [self malformedChar: #(245 128 128 128)] raise: Error! !

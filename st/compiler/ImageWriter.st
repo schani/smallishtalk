@@ -225,13 +225,15 @@ stringFor: aString
 	o beImmutable.
 	^o!
 
-characterFor: aCharacter
+characterForCode: anInteger
+	"character literals reach the writer as StCharCode code points —
+	 plain SmallIntegers, host-identical (never host Character objects)"
 	| o |
 	charObjs do: [:pair |
-		(pair at: 1) = aCharacter value ifTrue: [^pair at: 2]].
+		(pair at: 1) = anInteger ifTrue: [^pair at: 2]].
 	o := self addObj: (StObj fixed: Treaty classCharacter slots: 1).
-	o at: 1 put: aCharacter value.
-	charObjs add: (Array with: aCharacter value with: o).
+	o at: 1 put: anInteger.
+	charObjs add: (Array with: anInteger with: o).
 	^o!
 
 globalAssocFor: aName
@@ -383,7 +385,7 @@ materializeLiteral: v method: methodObj classDesc: d classSide: isMeta
 	(v isKindOf: Integer) ifTrue: [^v].
 	(v isKindOf: Symbol) ifTrue: [^self symbolFor: v].
 	(v isKindOf: String) ifTrue: [^self stringFor: v].
-	(v isKindOf: Character) ifTrue: [^self characterFor: v].
+	(v isKindOf: StCharCode) ifTrue: [^self characterForCode: v code].
 	(v isKindOf: Array) ifTrue: [
 		(v size = 2 and: [(v at: 1) == #byteArray]) ifTrue: [
 			| o |
