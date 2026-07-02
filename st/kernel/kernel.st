@@ -691,19 +691,41 @@ with: aCharacter
 	^s! !
 
 !Symbol class methodsFor: 'interning'!
+bucketHash: aString
+	"byte hash for the intern index (String/Symbol at: answers bytes,
+	 §15). Must match nothing anywhere — purely internal to the index."
+	| h |
+	h := aString size * 131.
+	1 to: (aString size min: 12) do: [:k |
+		h := (h * 31 + (aString at: k)) \\ 262144].
+	^(h \\ 512) + 1!
+indexInto: buckets symbol: aSymbol
+	| h b |
+	h := self bucketHash: aSymbol.
+	b := buckets at: h.
+	b isNil ifTrue: [b := OrderedCollection new. buckets at: h put: b].
+	b add: aSymbol!
+buildIndex
+	"bucket the SymbolTable global the image writer emitted (a flat
+	 Array of every image symbol) — built once, on the first intern"
+	| buckets |
+	buckets := Array new: 512.
+	SymbolTable do: [:s |
+		s notNil ifTrue: [self indexInto: buckets symbol: s]].
+	^buckets!
 intern: aString
-	"strong interning over the SymbolTable global (an Array, grown by
-	 copying; §15). Symbol identity = pointer identity afterwards."
-	| table i cand sym |
-	table := SymbolTable.
-	i := 1.
-	[i <= table size] whileTrue: [
-		cand := table at: i.
-		(cand notNil and: [self is: cand sameAs: aString])
-			ifTrue: [^cand].
-		i := i + 1].
+	"strong interning through a bucketed index built lazily over the
+	 SymbolTable global (§15). Symbol identity = pointer identity
+	 afterwards. New symbols live only in the index; SymbolTable stays
+	 the immutable seed."
+	| buckets b sym |
+	buckets := SymbolIndex.
+	buckets isNil ifTrue: [buckets := self buildIndex. SymbolIndex := buckets].
+	b := buckets at: (self bucketHash: aString).
+	b notNil ifTrue: [
+		b do: [:cand | (self is: cand sameAs: aString) ifTrue: [^cand]]].
 	sym := self newFrom: aString.
-	SymbolTable := self append: sym to: table.
+	self indexInto: buckets symbol: sym.
 	^sym!
 is: aSymbol sameAs: aString
 	aSymbol size = aString size ifFalse: [^false].
@@ -714,13 +736,7 @@ newFrom: aString
 	| s |
 	s := Symbol new: aString size.
 	1 to: aString size do: [:k | s at: k put: (aString at: k)].
-	^s!
-append: anObject to: anArray
-	| r |
-	r := Array new: anArray size + 1.
-	1 to: anArray size do: [:k | r at: k put: (anArray at: k)].
-	r at: r size put: anObject.
-	^r! !
+	^s! !
 
 !Symbol methodsFor: 'printing'!
 asString

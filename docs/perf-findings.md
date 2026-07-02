@@ -136,6 +136,19 @@ compiler's small tables, catastrophic at scale. A hashed Dictionary
 fixes both this row and finding 1 (symbol interning wants exactly that
 structure).
 
+## Progress
+
+- **2026-07-02, finding 1 fixed** (bucketed symbol interning: a 512-way
+  byte-hash index in `StImageWriter>>symbolFor:` — lookup-only state, so
+  emission order and image bytes are untouched — and a lazily-built
+  `SymbolIndex` over the SymbolTable global in `Symbol class>>intern:`):
+  self-compile **2260 ms → 1191 ms (−47%)**, GST ratio 4.37× → 2.72×
+  (GST runs the same writer and dropped 517 → 438 ms too). Phase-5
+  bit-identity held; all suites green. The re-profile
+  (`bench/results/self_compile.profile.txt`) shows `symbolFor:`/`intern:`
+  gone from the table; the new top is findings 2+3: `do:` 16.1% self /
+  81% total, `Character>>=` 11.4%, `isKindOf:` 11.1%, `String>>=` 10.2%.
+
 ## Recommended attack order
 
 1. Hash the symbol table / `Symbol class>>intern:` (finding 1) —

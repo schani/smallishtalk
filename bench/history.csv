@@ -18,3 +18,6 @@ date,rev,workload,vm_ms_median,vm_ms_min,vm_iqr_pct,gst_ms_median,ratio_vm_over_
 2026-07-02T14:23:57Z,a8e03ae,exceptions,11.0,10.0,4.5,73.0,0.15,
 2026-07-02T14:23:57Z,a8e03ae,process_pingpong,5.0,5.0,0.0,3.0,1.67,
 2026-07-02T14:23:57Z,a8e03ae,self_compile,2260.0,2248.0,0.7,517.0,4.37,
+2026-07-02T14:40:31Z,6981624,self_compile,1191.0,1187.0,1.7,438.0,2.72,
+2026-07-02T14:40:31Z,6981624,string_build,109.0,106.0,3.2,15.0,7.27,
+2026-07-02T14:40:31Z,6981624,dictionary,372.0,363.0,2.7,5.0,74.40,

@@ -113,8 +113,8 @@ initMethods
 
 Object subclass: #StImageWriter
 	instanceVariableNames: 'objects nilObj trueObj falseObj symbolNames symbolObjs
-classes classOrder nextClassIndex globalNames globalAssocs smalltalkObj
-processObj stackObj specialsObj charObjs'
+symbolBuckets classes classOrder nextClassIndex globalNames globalAssocs
+smalltalkObj processObj stackObj specialsObj charObjs'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'Smallishtalk-Compiler'!
@@ -170,6 +170,7 @@ init
 	objects := OrderedCollection new.
 	symbolNames := OrderedCollection new.
 	symbolObjs := OrderedCollection new.
+	symbolBuckets := Array new: 512.
 	classes := OrderedCollection new.	"of StClassDesc, definition order"
 	nextClassIndex := Treaty firstUnreservedClassIndex.
 	globalNames := OrderedCollection new.
@@ -190,18 +191,32 @@ objects ^objects!
 classes ^classes! !
 
 !StImageWriter methodsFor: 'symbols'!
+symbolHash: aString
+	"portable byte hash: Platform bytesOf: answers indexable byte values
+	 on both hosts. Stays far below either host's SmallInteger range."
+	| bs h |
+	bs := Platform bytesOf: aString.
+	h := bs size * 131.
+	1 to: (bs size min: 12) do: [:k |
+		h := (h * 31 + (bs at: k)) \\ 262144].
+	^(h \\ 512) + 1!
 symbolFor: aStringOrSymbol
-	"intern in first-encounter order"
-	| s i o |
+	"intern in first-encounter order. The bucket index is lookup-only
+	 state: creation order (and so emission order) is untouched, which is
+	 what keeps images bit-identical with the pre-index writer."
+	| s h b o |
 	s := aStringOrSymbol asString.
-	i := 1.
-	symbolNames do: [:n |
-		n = s ifTrue: [^symbolObjs at: i].
-		i := i + 1].
+	h := self symbolHash: s.
+	b := symbolBuckets at: h.
+	b isNil
+		ifTrue: [b := OrderedCollection new. symbolBuckets at: h put: b]
+		ifFalse: [
+			b do: [:i | (symbolNames at: i) = s ifTrue: [^symbolObjs at: i]]].
 	o := self addObj: (StObj bytes: Treaty classSymbol contents: (Platform bytesOf: s)).
 	o beImmutable.
 	symbolNames add: s.
 	symbolObjs add: o.
+	b add: symbolObjs size.
 	^o!
 
 stringFor: aString
