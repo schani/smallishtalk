@@ -148,6 +148,11 @@ structure).
   (`bench/results/self_compile.profile.txt`) shows `symbolFor:`/`intern:`
   gone from the table; the new top is findings 2+3: `do:` 16.1% self /
   81% total, `Character>>=` 11.4%, `isKindOf:` 11.1%, `String>>=` 10.2%.
+  Counter deltas tell the same story: total sends **41.65 M → 22.77 M**
+  (the interning scans were half of *all* sends), instructions
+  452.7 M → 223.8 M, block activations 3.07 M → 1.12 M, staged sends
+  9.15 M → 3.32 M. Inline-cache misses stayed ≈ 2.6 M — now 11.6% of
+  sends, so the megamorphic-site problem grew in relative weight.
 
 ## Recommended attack order
 
