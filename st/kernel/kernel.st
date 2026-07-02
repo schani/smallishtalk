@@ -574,9 +574,14 @@ hash
 
 !SequenceableCollection methodsFor: 'iterating'!
 do: aBlock
-	| i |
+	"iterates the elements present at entry: size is read once, so
+	 mutating the receiver during do: is unsupported (deliberate - no
+	 standard defines it and implementations disagree; see
+	 docs/perf-findings.md)"
+	| i n |
 	i := 1.
-	[i <= self size] whileTrue: [
+	n := self size.
+	[i <= n] whileTrue: [
 		aBlock value: (self at: i).
 		i := i + 1]!
 do: aBlock separatedBy: sepBlock

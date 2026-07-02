@@ -1,218 +1,231 @@
-Profile: 1133 samples at 1 ms
+Profile: 1100 samples at 1 ms
  self%  total%  name
- 18.5%   81.2%  SequenceableCollection>>do:
- 11.4%   11.4%  Object>>isKindOf:
- 10.9%   12.1%  Character>>=
- 10.0%   14.4%  String>>=
-  3.2%    7.0%  WriteStream>>nextPut:
-  2.9%    2.9%  OrderedCollection>>grow
-  2.8%    5.0%  String>>charAt:
-  1.9%   16.0%  StChunkReader>>nextChunk
-  1.9%    2.2%  WriteStream>>growTarget
-  1.8%    1.8%  StLexer>>isLetterChar:
-  1.7%    4.0%  StImageWriter>>emitWord:into:
-  1.6%    2.2%  Character class>>value:
-  1.5%   16.2%  SmallInteger>>to:do:
-  1.5%    7.4%  StLexer>>scanIdentName
-  1.5%    3.9%  StLexer>>peekChar
-  1.1%    4.5%  StLexer>>skipSeparators
-  0.9%    7.9%  StCodeGen>>compileMessage:to:
-  0.8%   20.8%  StLexer>>scan
-  0.8%    9.1%  StImageWriter>>emitObj:into:
-  0.7%    0.7%  WriteStream>>contents
-  0.7%    9.0%  StLexer>>scanIdentifier:
-  0.7%    3.1%  StParser>>parsePrimary
-  0.7%    0.7%  <vm:prim:201>
-  0.7%    0.7%  StLexer>>isSpaceChar:
-  0.6%   15.1%  [] in StEncoder class>>bytesForAll:
-  0.6%    2.2%  WriteStream>>nextPutAll:
-  0.6%    1.0%  StImageWriter>>emitHeaderHalvesClass:nslotsField:format:gc:into:
-  0.6%    0.6%  <vm:prim:4>
-  0.5%    4.5%  StParser>>parseKeywordMessage
-  0.5%    4.5%  StCodeGen>>walkMessage:with:
-  0.5%    3.8%  [] in StCodeGen>>classifyLocals
-  0.5%    0.5%  Platform class>>readFile:
-  0.5%    0.5%  String>>,
-  0.4%   21.6%  StLexer class>>tokenize:
-  0.4%    0.7%  SmallInteger>>timesRepeat:
-  0.4%    0.4%  <vm:prim:111>
-  0.4%    0.4%  Symbol>>asString
-  0.3%   13.1%  StCodeGen>>compile
-  0.3%    8.0%  SequenceableCollection>>includes:
-  0.3%    1.5%  [] in StImageWriter>>sitesObjFor:classDesc:classSide:
-  0.3%    1.2%  StLexer>>scanString:
-  0.3%    0.3%  <vm:prim:114>
-  0.3%    0.3%  StToken class>>type:value:position:
-  0.2%   19.5%  StImageWriter>>materializeMethod:forClassDesc:classSide:
-  0.2%   13.9%  StEncoder class>>encode:
-  0.2%    8.8%  StCodeGen>>compileExpr:to:
-  0.2%    5.3%  StCodeGen>>compileGeneralSend:to:
-  0.2%    5.0%  [] in StImageWriter>>emitObj:into:
-  0.2%    1.4%  StLexer>>isIdentChar:
-  0.2%    1.3%  StLexer>>isBinaryChar:
-  0.2%    0.9%  [] in StCodeGen>>rawFreeNamesOf:
-  0.2%    0.6%  StLexer>>skipComment
-  0.2%    0.2%  OrderedCollection>>initStore
-  0.2%    0.2%  StParser>>currentType
-  0.1%   21.0%  StLexer>>next
-  0.1%    6.1%  StEncoder class>>opcodeFor:
-  0.1%    4.7%  StParser>>parseExpression
-  0.1%    4.5%  StImageWriter>>literalsObjFor:method:classDesc:classSide:
-  0.1%    3.3%  StParser>>parseUnaryMessage
-  0.1%    3.0%  OrderedCollection>>add:
-  0.1%    2.4%  StCodeGen>>compileVariable:to:
-  0.1%    2.2%  StParser>>parseBlock
-  0.1%    1.6%  StCodeGen>>compileSpecialized:to:
-  0.1%    1.5%  [] in StCodeGen>>freeLocalNamesOf:
-  0.1%    1.4%  String>>asSymbol
-  0.1%    1.0%  StLexer>>nextChar
-  0.1%    0.6%  StImageWriter>>slotWord:
-  0.1%    0.4%  OrderedCollection class>>new
-  0.1%    0.2%  StCodeGen>>macroKindOf:
-  0.1%    0.1%  StImageWriter>>packHeaderFor:
-  0.1%    0.1%  StLexer class>>on:
-  0.1%    0.1%  String>>species
-  0.1%    0.1%  WriteStream class>>on:
+ 15.9%   80.8%  SequenceableCollection>>do:
+ 11.2%   11.2%  Object>>isKindOf:
+ 10.6%   11.4%  Character>>=
+  9.2%   13.2%  String>>=
+  3.3%    3.3%  OrderedCollection>>grow
+  3.1%    6.2%  String>>charAt:
+  3.0%    3.0%  Character class>>value:
+  2.6%    9.6%  StLexer>>scanIdentName
+  2.4%    5.8%  WriteStream>>nextPut:
+  2.1%    2.1%  StLexer>>isLetterChar:
+  1.7%    3.8%  StImageWriter>>emitWord:into:
+  1.6%    1.6%  WriteStream>>contents
+  1.4%   15.9%  StChunkReader>>nextChunk
+  1.3%   15.6%  SmallInteger>>to:do:
+  1.3%    1.3%  WriteStream>>growTarget
+  1.1%   21.0%  StLexer>>scan
+  1.1%    3.9%  StLexer>>peekChar
+  1.0%    4.6%  [] in StCodeGen>>classifyLocals
+  1.0%    1.0%  <vm:prim:201>
+  0.9%   15.5%  [] in StEncoder class>>bytesForAll:
+  0.9%    1.1%  StImageWriter>>emitHeaderHalvesClass:nslotsField:format:gc:into:
+  0.9%    0.9%  StLexer>>isSpaceChar:
+  0.7%    3.6%  StLexer>>skipSeparators
+  0.6%   19.7%  StImageWriter>>materializeMethod:forClassDesc:classSide:
+  0.6%    7.7%  StCodeGen>>compileMessage:to:
+  0.6%    4.0%  StCodeGen>>walkMessage:with:
+  0.6%    0.6%  Platform class>>readFile:
+  0.6%    0.6%  String>>,
+  0.5%    9.0%  StImageWriter>>emitObj:into:
+  0.5%    5.4%  StParser>>parseStatementsUntil:
+  0.5%    5.0%  StParser>>parseKeywordMessage
+  0.5%    2.4%  WriteStream>>nextPutAll:
+  0.5%    1.3%  [] in StImageWriter>>sitesObjFor:classDesc:classSide:
+  0.5%    0.5%  StParser>>currentType
+  0.4%   21.9%  StLexer class>>tokenize:
+  0.4%   13.8%  StCodeGen>>compile
+  0.4%    2.0%  StLexer>>isIdentChar:
+  0.4%    0.4%  <vm:prim:114>
+  0.4%    0.4%  StLexer>>isDigitChar:
+  0.3%    5.3%  [] in StImageWriter>>emitObj:into:
+  0.3%    3.0%  StParser>>parsePrimary
+  0.3%    2.7%  StCodeGen>>compileVariable:to:
+  0.3%    1.6%  StChunkReader>>copyCommentInto:
+  0.3%    0.3%  <vm:prim:111>
+  0.3%    0.3%  <vm:prim:4>
+  0.3%    0.3%  StCodeGen>>compileLiteral:to:
+  0.2%   14.2%  StEncoder class>>encode:
+  0.2%    9.4%  [] in StCodeGen>>compileBody:
+  0.2%    9.1%  StCodeGen>>compileExpr:to:
+  0.2%    8.0%  SequenceableCollection>>includes:
+  0.2%    1.6%  StLexer>>nextChar
+  0.2%    1.5%  StImageWriter>>symbolFor:
+  0.2%    1.4%  Symbol class>>intern:
+  0.2%    0.2%  Symbol>>asString
+  0.1%    5.8%  StCodeGen>>compileGeneralSend:to:
+  0.1%    3.8%  StParser>>parseBinaryMessage
+  0.1%    3.2%  StParser>>parseUnaryMessage
+  0.1%    2.6%  StParser>>parseBlock
+  0.1%    1.9%  StCodeGen>>compileSpecialized:to:
+  0.1%    1.7%  [] in StImageWriter>>findClass:
+  0.1%    1.2%  [] in StCodeGen>>freeLocalNamesOf:
+  0.1%    1.0%  StLexer>>skipComment
+  0.1%    0.9%  StLexer>>isBinaryChar:
+  0.1%    0.7%  StImageWriter>>slotWord:
+  0.1%    0.6%  StObj>>initSlots:
+  0.1%    0.5%  Symbol class>>bucketHash:
+  0.1%    0.3%  SmallInteger>>timesRepeat:
+  0.1%    0.3%  StCodeGen>>macroKindOf:
+  0.1%    0.1%  <vm:prim:9>
+  0.1%    0.1%  OrderedCollection>>initStore
+  0.1%    0.1%  StChunkReader>>isSeparator:
   0.1%    0.1%  [] in StImageWriter>>layout
-  0.0%   59.6%  [] in [] in StImageBuilder>>fileInSource:
-  0.0%   59.5%  StImageWriter>>addMethodSource:toClass:classSide:
-  0.0%   23.3%  StParser class>>parseMethod:
-  0.0%   18.2%  StChunkReader>>events
-  0.0%   15.7%  StImageWriter>>bytecodesObjFor:
-  0.0%   13.2%  StCodeGen class>>compileMethod:inClass:
-  0.0%    9.0%  [] in StCodeGen>>compileBody:
-  0.0%    4.7%  StParser>>parseCascade
-  0.0%    4.7%  StParser>>parseStatementsUntil:
-  0.0%    4.2%  StImageWriter>>materializeLiteral:method:classDesc:classSide:
-  0.0%    4.1%  [] in StCodeGen>>compileGeneralSend:to:
-  0.0%    3.9%  StCodeGen>>classifyLocals
-  0.0%    3.6%  StCodeGen>>compileBlock:to:
-  0.0%    2.0%  StImageWriter>>symbolFor:
-  0.0%    1.3%  StChunkReader>>copyCommentInto:
-  0.0%    1.3%  StCodeGen>>compileReturn:
-  0.0%    1.3%  StLexer>>scanBinary:
-  0.0%    1.2%  Symbol class>>intern:
-  0.0%    0.7%  StCodeGen>>slotOfLocal:
+  0.0%   61.6%  StImageWriter>>addMethodSource:toClass:classSide:
+  0.0%   21.1%  StLexer>>next
+  0.0%   16.0%  StImageWriter>>bytecodesObjFor:
+  0.0%   10.8%  StLexer>>scanIdentifier:
+  0.0%    9.6%  StCodeGen>>compileBody:
+  0.0%    9.1%  [] in StImageWriter>>imageBytes
+  0.0%    5.0%  StParser>>parseExpression
+  0.0%    4.2%  StImageWriter>>literalsObjFor:method:classDesc:classSide:
+  0.0%    3.3%  StEncoder class>>isSingleA:
+  0.0%    3.1%  [] in StCodeGen>>walkMessage:with:
+  0.0%    2.7%  StCodeGen>>compileIf:then:else:to:
+  0.0%    2.7%  StEncoder class>>isAdFormat:
+  0.0%    2.2%  StCodeGen>>resolve:
+  0.0%    1.7%  StImageWriter>>sitesObjFor:classDesc:classSide:
+  0.0%    1.0%  [] in StLexer>>scanHash:
+  0.0%    0.9%  [] in StImageWriter>>wireClassObjects
+  0.0%    0.8%  StCodeGen>>compileReturn:
+  0.0%    0.8%  [] in StParser>>parsePatternInto:
+  0.0%    0.7%  StImageWriter>>allInstVarNamesOf:
+  0.0%    0.7%  StLexer>>scanString:
   0.0%    0.5%  StChunkReader>>copyStringInto:
-  0.0%    0.5%  StImageWriter>>defineClass:superclass:instVarNames:
-  0.0%    0.5%  StImageWriter>>symbolHash:
-  0.0%    0.4%  StCodeGen>>isLocalName:
-  0.0%    0.4%  StImageWriter>>allInstVarNamesOf:
-  0.0%    0.2%  StImageWriter class>>builtinFormatFor:
-  0.0%    0.2%  [] in StCodeGen>>compileVariable:to:
-  0.0%    0.2%  [] in StCodeGen>>subtreeHasReturn:
-  0.0%    0.2%  [] in StObj>>initSlots:
-  0.0%    0.1%  [] in StCodeGen>>compileBlock:to:
+  0.0%    0.4%  [] in StCodeGen>>compileVariable:to:
+  0.0%    0.3%  StObj class>>fixed:slots:
+  0.0%    0.3%  [] in StCodeGen>>subtreeHasReturn:
+  0.0%    0.2%  StParser>>parsePragmasAndTempsInto:
+  0.0%    0.1%  StCodeGen>>siteIndex:argc:super:
+  0.0%    0.1%  StLexer>>peekChar2
+  0.0%    0.1%  StToken class>>type:value:position:
+  0.0%    0.1%  [] in Symbol class>>buildIndex
+  0.0%    0.0%  <vm:prim:200>
   0.0%    0.0%  <vm:prim:5>
-  0.0%    0.0%  OrderedCollection class>>with:
-  0.0%    0.0%  StLexer>>isDigitChar:
-  0.0%    0.0%  StLexer>>scanNumber:negative:
+  0.0%    0.0%  Array class>>with:with:with:
+  0.0%    0.0%  Array class>>with:with:with:with:
+  0.0%    0.0%  OrderedCollection>>asArray
+  0.0%    0.0%  StCodeGen>>compileBlockIvarRead:to:
+  0.0%    0.0%  StCodeGen>>compileOr:with:to:
+  0.0%    0.0%  StCodeGen>>isInlinableBlock:
+  0.0%    0.0%  StImageBuilder>>splitWords:
+  0.0%    0.0%  StImageWriter>>formatCodeFor:
   0.0%    0.0%  StObj class>>bytes:contents:
-  0.0%    0.0%  StParser>>isBinaryOperator
-  0.0%    0.0%  StParser>>peekType
-  0.0%    0.0%  [] in StCodeGen>>compile
+  0.0%    0.0%  StParser>>advance
+  0.0%    0.0%  StParser>>expect:
+  0.0%    0.0%  [] in StImageWriter>>buildSpecialsWithStartUp:
   0.0%  100.0%  Profiler class>>spy:
   0.0%  100.0%  Profiler class>>spy:interval:
   0.0%  100.0%  SystemDictionary>>startUp
   0.0%  100.0%  [] in SystemDictionary>>startUp
-  0.0%   81.5%  StImageBuilder>>fileInFile:
-  0.0%   81.0%  StImageBuilder>>fileInSource:
-  0.0%   62.7%  [] in StImageBuilder>>fileInSource:
-  0.0%   36.5%  StCodeGen class>>compileMethodSource:inClass:
-  0.0%   18.2%  StChunkReader class>>eventsFrom:
-  0.0%   17.4%  StImageBuilder>>writeTo:
-  0.0%   17.4%  StImageWriter>>writeTo:
-  0.0%   15.6%  StEncoder class>>bytesForAll:
-  0.0%   14.2%  StChunkReader>>readMethodGroup:
-  0.0%    9.9%  StImageWriter>>imageBytes
-  0.0%    9.1%  [] in StImageWriter>>imageBytes
-  0.0%    9.0%  StCodeGen>>compileBody:
-  0.0%    7.5%  Platform class>>writeBytes:toFile:
-  0.0%    5.5%  StParser>>parseMethod
-  0.0%    5.2%  Boolean>>ifTrue:
-  0.0%    4.2%  [] in StImageWriter>>literalsObjFor:method:classDesc:classSide:
-  0.0%    4.0%  [] in SequenceableCollection>>includes:
-  0.0%    3.7%  StImageWriter>>materializeBlock:outer:classDesc:classSide:
-  0.0%    3.4%  [] in StCodeGen>>walkMessage:with:
-  0.0%    3.3%  StImageWriter>>findClass:
-  0.0%    3.3%  StParser>>parseBinaryMessage
-  0.0%    3.2%  StEncoder class>>isSingleA:
-  0.0%    3.0%  StImageBuilder>>handleDoIt:
-  0.0%    2.6%  StCodeGen>>compileIf:then:else:to:
-  0.0%    2.5%  StCodeGen>>compileInlineBlock:to:
-  0.0%    2.5%  StEncoder class>>isAdFormat:
-  0.0%    2.5%  [] in StCodeGen>>compileInlineBlock:to:
-  0.0%    2.4%  StCodeGen>>compileAssignment:to:
-  0.0%    2.2%  StCodeGen>>resolve:
-  0.0%    2.2%  StParser class>>parseDoIt:
-  0.0%    2.0%  StImageWriter>>sitesObjFor:classDesc:classSide:
-  0.0%    1.9%  BlockClosure>>on:do:
-  0.0%    1.9%  BlockClosure>>protectOn:do:
-  0.0%    1.9%  StChunkReader>>isMethodHeader:
-  0.0%    1.9%  [] in StChunkReader>>isMethodHeader:
-  0.0%    1.9%  [] in [] in StCodeGen>>walkMessage:with:
-  0.0%    1.6%  StImageWriter>>classScopeFor:classSide:
-  0.0%    1.5%  StCodeGen>>freeLocalNamesOf:
-  0.0%    1.4%  StEncoder class>>isNoOperandAd:
-  0.0%    1.3%  [] in StImageWriter>>findClass:
-  0.0%    1.3%  [] in StParser>>parsePrimary
-  0.0%    1.3%  [] in [] in StCodeGen>>classifyLocals
-  0.0%    1.0%  StCodeGen>>blockUsesSelfOrIvars:
-  0.0%    1.0%  StCodeGen>>rawFreeNamesOf:
+  0.0%   83.1%  StImageBuilder>>fileInFile:
+  0.0%   82.5%  StImageBuilder>>fileInSource:
+  0.0%   63.9%  [] in StImageBuilder>>fileInSource:
+  0.0%   61.6%  [] in [] in StImageBuilder>>fileInSource:
+  0.0%   38.2%  StCodeGen class>>compileMethodSource:inClass:
+  0.0%   24.4%  StParser class>>parseMethod:
+  0.0%   18.6%  StChunkReader class>>eventsFrom:
+  0.0%   18.6%  StChunkReader>>events
+  0.0%   15.9%  StEncoder class>>bytesForAll:
+  0.0%   15.8%  StImageBuilder>>writeTo:
+  0.0%   15.8%  StImageWriter>>writeTo:
+  0.0%   14.5%  StChunkReader>>readMethodGroup:
+  0.0%   13.8%  StCodeGen class>>compileMethod:inClass:
+  0.0%    9.8%  StImageWriter>>imageBytes
+  0.0%    6.4%  StParser>>parseMethod
+  0.0%    6.0%  StEncoder class>>opcodeFor:
+  0.0%    6.0%  Platform class>>writeBytes:toFile:
+  0.0%    5.1%  [] in StCodeGen>>compileGeneralSend:to:
+  0.0%    5.0%  Boolean>>ifTrue:
+  0.0%    5.0%  StParser>>parseCascade
+  0.0%    4.7%  StCodeGen>>classifyLocals
+  0.0%    4.4%  StCodeGen>>compileBlock:to:
+  0.0%    3.8%  StImageWriter>>materializeLiteral:method:classDesc:classSide:
+  0.0%    3.8%  [] in StImageWriter>>literalsObjFor:method:classDesc:classSide:
+  0.0%    3.6%  StImageWriter>>findClass:
+  0.0%    3.5%  StImageWriter>>materializeBlock:outer:classDesc:classSide:
+  0.0%    3.4%  [] in SequenceableCollection>>includes:
+  0.0%    3.3%  OrderedCollection>>add:
+  0.0%    2.8%  StCodeGen>>compileAssignment:to:
+  0.0%    2.2%  StImageBuilder>>handleDoIt:
+  0.0%    2.2%  StImageWriter>>classScopeFor:classSide:
+  0.0%    2.1%  BlockClosure>>on:do:
+  0.0%    2.1%  BlockClosure>>protectOn:do:
+  0.0%    2.1%  StChunkReader>>isMethodHeader:
+  0.0%    2.1%  StCodeGen>>compileInlineBlock:to:
+  0.0%    2.1%  [] in StChunkReader>>isMethodHeader:
+  0.0%    2.1%  [] in StCodeGen>>compileInlineBlock:to:
+  0.0%    1.8%  StParser class>>parseDoIt:
+  0.0%    1.7%  StEncoder class>>isNoOperandAd:
+  0.0%    1.4%  String>>asSymbol
+  0.0%    1.4%  [] in [] in StCodeGen>>walkMessage:with:
+  0.0%    1.2%  StCodeGen>>freeLocalNamesOf:
   0.0%    1.0%  StLexer>>scanHash:
-  0.0%    1.0%  [] in StLexer>>scanHash:
-  0.0%    0.9%  StImageBuilder>>programSource:
-  0.0%    0.9%  StParser>>parsePatternInto:
-  0.0%    0.8%  StImageWriter>>wireClassObjects
-  0.0%    0.8%  [] in StImageWriter>>wireClassObjects
-  0.0%    0.7%  StCodeGen>>compileWhile:body:until:to:
-  0.0%    0.7%  [] in StParser>>parseExpression
-  0.0%    0.7%  StClassScope>>indexOfInstVar:
-  0.0%    0.7%  StObj>>initSlots:
-  0.0%    0.5%  StObj class>>ptrs:slots:
-  0.0%    0.5%  Symbol class>>bucketHash:
-  0.0%    0.5%  [] in StCodeGen>>compileSpecialized:to:
+  0.0%    1.0%  StCodeGen>>slotOfLocal:
+  0.0%    1.0%  StImageBuilder>>programSource:
+  0.0%    1.0%  StParser>>parsePatternInto:
+  0.0%    1.0%  [] in StParser>>parsePrimary
+  0.0%    0.9%  StCodeGen>>rawFreeNamesOf:
+  0.0%    0.9%  StImageWriter>>wireClassObjects
+  0.0%    0.8%  StCodeGen>>blockUsesSelfOrIvars:
+  0.0%    0.8%  [] in StCodeGen>>rawFreeNamesOf:
+  0.0%    0.7%  [] in [] in StCodeGen>>classifyLocals
+  0.0%    0.6%  StImageWriter>>symbolHash:
+  0.0%    0.6%  [] in StParser>>parseExpression
+  0.0%    0.5%  StCodeGen>>emit:
+  0.0%    0.5%  StImageWriter>>globalAssocFor:
+  0.0%    0.5%  StLexer>>scanBinary:
   0.0%    0.5%  [] in StCodeGen>>slotOfLocal:
-  0.0%    0.4%  StCodeGen>>namesAssignedInside:
-  0.0%    0.4%  StParser>>parseDoIt
-  0.0%    0.4%  [] in StCodeGen>>namesAssignedInside:
-  0.0%    0.4%  [] in StParser>>parsePatternInto:
-  0.0%    0.3%  StCodeGen>>isCapturableName:
-  0.0%    0.3%  StCodeGen>>literalIndex:
-  0.0%    0.3%  StImageWriter>>globalAssocFor:
+  0.0%    0.4%  StClassScope>>indexOfInstVar:
+  0.0%    0.4%  StCodeGen>>compileWhile:body:until:to:
+  0.0%    0.4%  StImageWriter>>mdictFor:objs:
+  0.0%    0.4%  [] in StCodeGen>>compileSpecialized:to:
+  0.0%    0.4%  [] in StImageWriter>>mdictFor:objs:
+  0.0%    0.3%  OrderedCollection class>>new
+  0.0%    0.3%  StCodeGen>>subtreeHasReturn:
+  0.0%    0.3%  StImageWriter>>defineClass:superclass:instVarNames:
   0.0%    0.3%  StImageWriter>>layout
-  0.0%    0.3%  StImageWriter>>mdictFor:objs:
-  0.0%    0.3%  StMessageNode>>isSuperSend
-  0.0%    0.3%  Symbol class>>is:sameAs:
-  0.0%    0.3%  [] in StImageWriter>>symbolFor:
-  0.0%    0.3%  [] in Symbol class>>intern:
-  0.0%    0.3%  [] in [] in StCodeGen>>freeLocalNamesOf:
+  0.0%    0.3%  StObj class>>ptrs:slots:
+  0.0%    0.3%  StParser>>parseDoIt
   0.0%    0.2%  StCodeGen>>freeNamesOfNested:shadowed:
-  0.0%    0.2%  StCodeGen>>subtreeHasReturn:
-  0.0%    0.2%  [] in StClassScope>>indexOfInstVar:
-  0.0%    0.2%  [] in StCodeGen>>blockUsesSelfOrIvars:
-  0.0%    0.1%  StCodeGen>>capturedIndexOf:
-  0.0%    0.1%  StCodeGen>>compileLiteral:to:
-  0.0%    0.1%  StCodeGen>>emit:
-  0.0%    0.1%  StGlobalRef>>=
-  0.0%    0.1%  StLexer>>peekChar2
-  0.0%    0.1%  StObj class>>fixed:slots:
-  0.0%    0.1%  StParser>>parsePragmasAndTempsInto:
-  0.0%    0.1%  [] in StCodeGen>>literalIndex:
-  0.0%    0.0%  Boolean>>ifTrue:ifFalse:
-  0.0%    0.0%  OrderedCollection>>addAll:
-  0.0%    0.0%  StCodeGen>>compileAnd:with:to:
+  0.0%    0.2%  StCodeGen>>namesAssignedInside:
+  0.0%    0.2%  Symbol class>>is:sameAs:
+  0.0%    0.2%  [] in StCodeGen>>namesAssignedInside:
+  0.0%    0.2%  [] in StImageWriter>>globalAssocFor:
+  0.0%    0.2%  [] in StImageWriter>>symbolFor:
+  0.0%    0.2%  [] in Symbol class>>intern:
+  0.0%    0.2%  [] in [] in StCodeGen>>freeLocalNamesOf:
+  0.0%    0.1%  OrderedCollection>>addAll:
+  0.0%    0.1%  StChunkReader>>isEmptyChunk:
+  0.0%    0.1%  StCodeGen>>compileAnd:with:to:
+  0.0%    0.1%  StCodeGen>>literalIndex:
+  0.0%    0.1%  StLexer>>scanDigits:
+  0.0%    0.1%  StLexer>>scanNumber:negative:
+  0.0%    0.1%  StParser>>isBinaryOperator
+  0.0%    0.1%  Symbol class>>buildIndex
+  0.0%    0.1%  [] in StClassScope>>indexOfInstVar:
+  0.0%    0.1%  [] in StCodeGen>>blockUsesSelfOrIvars:
+  0.0%    0.1%  [] in StCodeGen>>compileBlock:to:
+  0.0%    0.0%  Behavior>>new
+  0.0%    0.0%  StCodeGen>>capturedIndexOf:
+  0.0%    0.0%  StCodeGen>>compileCascade:to:
+  0.0%    0.0%  StCodeGen>>compileOneCascadeMessage:receiverSlot:to:
   0.0%    0.0%  StCodeGen>>isBoxedInAncestors:
-  0.0%    0.0%  StImageBuilder>>splitWords:
+  0.0%    0.0%  StCodeGen>>isCapturableName:
+  0.0%    0.0%  StCodeGen>>isLocalName:
+  0.0%    0.0%  StGlobalRef>>=
   0.0%    0.0%  StImageWriter class>>treatyIndexFor:
   0.0%    0.0%  StImageWriter>>addObj:
   0.0%    0.0%  StImageWriter>>buildSpecialsWithStartUp:
-  0.0%    0.0%  StImageWriter>>ivarNamesArrayFor:
+  0.0%    0.0%  StLexer>>digitValue:
   0.0%    0.0%  StParser>>parseCascadePart
-  0.0%    0.0%  Symbol class>>buildIndex
+  0.0%    0.0%  StParser>>parsePragma
+  0.0%    0.0%  StParser>>setTokens:
   0.0%    0.0%  Symbol class>>indexInto:symbol:
-  0.0%    0.0%  [] in StImageWriter>>globalAssocFor:
-  0.0%    0.0%  [] in StImageWriter>>ivarNamesArrayFor:
-  0.0%    0.0%  [] in Symbol class>>buildIndex
+  0.0%    0.0%  [] in OrderedCollection>>addAll:
+  0.0%    0.0%  [] in StCodeGen>>compileCascade:to:
+  0.0%    0.0%  [] in StCodeGen>>compileOneCascadeMessage:receiverSlot:to:
+  0.0%    0.0%  [] in StCodeGen>>literalIndex:
+  0.0%    0.0%  [] in StObj>>initSlots:
   0.0%    0.0%  [] in [] in StCodeGen>>subtreeHasReturn:
-  0.0%    0.0%  [] in [] in [] in StCodeGen>>freeLocalNamesOf:

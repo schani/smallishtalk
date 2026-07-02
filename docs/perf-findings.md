@@ -154,6 +154,22 @@ structure).
   9.15 M → 3.32 M. Inline-cache misses stayed ≈ 2.6 M — now 11.6% of
   sends, so the megamorphic-site problem grew in relative weight.
 
+- **2026-07-02, finding 2 first step** (hoist `self size` out of the
+  generic `SequenceableCollection>>do:` loop — read once at entry;
+  snapshot-length iteration is now the documented, deliberate semantics,
+  justified by the survey in this doc's history: no standard defines
+  mutation-during-`do:` and GST is internally inconsistent about it):
+  self-compile **1191 → 1167 ms (−2%)**. Exactly what the counters
+  predicted: `size` fallthroughs fell 835 k → 151 k and total sends
+  22.77 M → 22.10 M (−0.68 M — a perfect cross-check), but at ~35 ns per
+  staged send that's only ~24 ms. The remaining `do:` cost is the `at:`
+  staged send and the block activation per element, and the profile's
+  center of gravity has shifted to finding 3: the character-handling
+  cluster (`isKindOf:` 11.2%, `Character>>=` 10.6%, `String>>=` 9.2%,
+  `charAt:` 3.1%, `Character class>>value:` 3.0%, `isLetterChar:` 2.1%)
+  is now ~39% of self time, concentrated under `StLexer>>scan` (21%
+  total) and `WriteStream>>nextPut:` (5.8% total).
+
 ## Recommended attack order
 
 1. Hash the symbol table / `Symbol class>>intern:` (finding 1) —
