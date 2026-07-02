@@ -211,6 +211,25 @@ structure).
   tests in codegen — the next image-level target), `to:do:` 6.5%,
   `OrderedCollection>>grow` 5.5% (pre-sizing opportunity).
 
+- **2026-07-02, codegen quality round** (research + three prototyped
+  experiments in `docs/codegen-plan.md`, Codex-reviewed; two landed, one
+  rejected on measurement): **inline `to:do:`** on literal 1-arg blocks —
+  loop variable in a frame slot, LE/ADD with their send fallthroughs, a
+  sound purely-AST-derived guard so the capture/boxing walkers stay
+  correct, kernel `Number>>to:do:` as the fallback for escapes/shadowing —
+  and **inline `isNil`/`notNil`** as LOADNIL+IDEQ(+NOT), making them
+  sealed dialect selectors like the specialized ones. The effect-position
+  DCE experiment removed 2.1 M dead MOVEs and 0 ms — MOVE traffic is
+  send staging, required by the calling convention — so it was reverted.
+  Self-compile **654 → ~605–625 ms, ratio 1.58× → ~1.40×**; loop-heavy
+  benches halved (send_loop 4.56→~2.3, arith_loop 4.82→~2.5, block_value
+  4.89→~2.5). Counters: sends 9.74 M → 8.45 M, **inline-cache misses
+  halved** (1.37 M → 0.69 M — the nil tests were the megamorphic sites),
+  block activations 1.03 M → 689 k. Codegen leverage on the self-compile
+  ratio is now largely spent: the profile top is `OrderedCollection>>do:`
+  11.3% self (VM: block activation), `grow`s ~9% (source: pre-sizing),
+  `isKindOf:` 5.0% (source: node-kind flags), `String>>=` 2.9%.
+
 ## Recommended attack order
 
 1. Hash the symbol table / `Symbol class>>intern:` (finding 1) —

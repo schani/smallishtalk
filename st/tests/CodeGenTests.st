@@ -69,6 +69,21 @@ testSpecializedUnary
 	self assertMethod: 'foo: x ^x size'
 		gives: #('MOVE 2, 1' 'SIZE 2, 2' 'RET 2')!
 
+testIsNilInlines
+	"isNil/notNil are sealed selectors: identity test, no send"
+	| spec |
+	spec := self compile: 'probe: y ^y isNil'.
+	self assert: spec sites isEmpty.
+	self assert: spec mnemonics = (self lines: #(
+		'MOVE 2, 1' 'LOADNIL 3' 'IDEQ 2, 2, 3' 'RET 2'))!
+
+testNotNilInlines
+	| spec |
+	spec := self compile: 'probe: y ^y notNil'.
+	self assert: spec sites isEmpty.
+	self assert: spec mnemonics = (self lines: #(
+		'MOVE 2, 1' 'LOADNIL 3' 'IDEQ 2, 2, 3' 'NOT 2, 2' 'RET 2'))!
+
 testSpecializedAtPut
 	self assertMethod: 'foo: a a at: 1 put: 2'
 		gives: #('MOVE 2, 1' 'LOADINT 3, 1' 'LOADINT 4, 2' 'ATPUT 2, 2, 3' 'RETSELF')!
@@ -199,3 +214,57 @@ testIvarReadWrite
 		= (self lines: #('GETIVAR 1, 1' 'RET 1')).
 	self assert: (self compile: 'setX: v x := v. ^self' ivars: scope) mnemonics
 		= (self lines: #('MOVE 2, 1' 'SETIVAR 0, 2' 'RETSELF'))! !
+
+!StCodeGenTests methodsFor: 'tests-inline-loops'!
+testToDoInlines
+	"a literal 1-arg block: no closure, no send site, and the mutated
+	 outer local stays an unboxed slot (docs/codegen-plan.md)"
+	| spec |
+	spec := self compile: 'sum | s | s := 0. 1 to: 3 do: [:i | s := s + i]. ^s'.
+	self assert: spec sites isEmpty.
+	self assert: spec literals isEmpty.
+	self assert: spec mnemonics = (self lines: #(
+		'LOADINT 1, 0' 'MOVE 2, 1'
+		'LOADINT 2, 1' 'LOADINT 4, 3' 'MOVE 3, 2'
+		'LE 5, 3, 4' 'JUMPFALSE 5, 7'
+		'MOVE 5, 1' 'MOVE 6, 3' 'ADD 1, 5, 6' 'MOVE 5, 1'
+		'LOADINT 5, 1' 'ADD 3, 3, 5' 'JUMP -9'
+		'MOVE 2, 1' 'RET 2'))!
+
+testToDoSiblingLoopsShareLoopVar
+	"two sibling loops binding the same :i both inline"
+	| spec |
+	spec := self compile: 'twice | s | s := 0. 1 to: 2 do: [:i | s := s + i]. 1 to: 3 do: [:i | s := s + i]. ^s'.
+	self assert: spec sites isEmpty.
+	self assert: spec literals isEmpty!
+
+testToDoReturnInBody
+	"a ^ in the body is a method return; the loop still inlines"
+	| spec |
+	spec := self compile: 'find 1 to: 9 do: [:i | i = 3 ifTrue: [^i]]. ^0'.
+	self assert: spec sites isEmpty!
+
+testToDoFallsBackWhenLoopVarEscapes
+	"the loop variable referenced from a nested real block would need a
+	 capture: real send"
+	| spec |
+	spec := self compile: 'esc | b | b := nil. 1 to: 3 do: [:i | b := [i]]. ^b'.
+	self assert: ((spec sites collect: [:s | s selector]) includes: #to:do:)!
+
+testToDoFallsBackWhenLoopVarShadows
+	"loop variable colliding with a name bound elsewhere in the method:
+	 real send"
+	| spec |
+	spec := self compile: 'clash: i 1 to: 3 do: [:i | self bar: i]. ^i'.
+	self assert: ((spec sites collect: [:s | s selector]) includes: #to:do:)!
+
+testToDoFallsBackOnNonLiteralBlock
+	| spec |
+	spec := self compile: 'run: aBlock 1 to: 3 do: aBlock'.
+	self assert: ((spec sites collect: [:s | s selector]) includes: #to:do:)!
+
+testToDoFallsBackWhenLoopVarIsIvar
+	| spec |
+	spec := self compile: 'foo 1 to: 3 do: [:x | self bar: x]'
+		ivars: (OrderedCollection new add: 'x'; yourself).
+	self assert: ((spec sites collect: [:s | s selector]) includes: #to:do:)! !

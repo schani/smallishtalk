@@ -167,7 +167,7 @@ indexOfInstVar: aString
 Object subclass: #StCodeGen
 	instanceVariableNames: 'classScope node parent captureNames captureSelf
 argNames tempNames boxedNames insns literals sites sp maxSp scratchBase
-isBlock reservedFailureSlot'
+isBlock reservedFailureSlot loopBindings'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'Smallishtalk-Compiler'!
@@ -203,6 +203,7 @@ setBlock: blockNode parent: aGen captures: names capturesSelf: selfFlag
 	captureSelf := selfFlag!
 
 classScope ^classScope!
+node ^node!
 argNames ^argNames!
 tempNames ^tempNames!
 boxedNames ^boxedNames!
@@ -216,6 +217,7 @@ compile
 	insns := OrderedCollection new.
 	literals := OrderedCollection new.
 	sites := OrderedCollection new.
+	loopBindings := OrderedCollection new.
 	argNames := node arguments asOrderedCollection.
 	tempNames := (node isKindOf: StBlockNode)
 		ifTrue: [node temporaries asOrderedCollection]
@@ -392,13 +394,18 @@ capturedIndexOf: name
 resolve: name
 	"→ #(#slot s boxed) | #(#captured i boxed) | #(#self) | #(#ivar i)
 	   | #(#global) | #(#pseudo #true/#false/#nil)"
-	| s idx |
+	| s idx k |
 	name = 'self' ifTrue: [^Array with: #self].
 	name = 'true' ifTrue: [^Array with: #pseudo with: #true].
 	name = 'false' ifTrue: [^Array with: #pseudo with: #false].
 	name = 'nil' ifTrue: [^Array with: #pseudo with: #nil].
 	name = 'super' ifTrue: [self error: 'super outside receiver position'].
 	name = 'thisContext' ifTrue: [self error: 'thisContext is not supported'].
+	k := loopBindings size.
+	[k >= 1] whileTrue: [
+		((loopBindings at: k) at: 1) = name ifTrue: [
+			^Array with: #slot with: ((loopBindings at: k) at: 2) with: false].
+		k := k - 1].
 	s := self slotOfLocal: name.
 	s notNil ifTrue: [
 		^Array with: #slot with: s with: (boxedNames includes: name)].
@@ -448,7 +455,126 @@ macroKindOf: n
 		and: [self isInlinableBlock: (args at: 1)]]]) ifTrue: [^#while].
 	((sel = #whileTrue or: [sel = #whileFalse]) and: [args isEmpty
 		and: [self isInlinableBlock: n receiver]]) ifTrue: [^#whileNoBody].
+	(sel = #to:do: and: [args size = 2 and: [self toDoInlinable: n]])
+		ifTrue: [^#toDo].
 	^nil!
+
+toDoShape: n
+	"syntactic shape: X to: Y do: [:v | ...] with a literal 1-arg, 0-temp
+	 block argument"
+	| body |
+	((n isKindOf: StMessageNode) and: [n selector = #to:do:
+		and: [n arguments size = 2]]) ifFalse: [^false].
+	body := n arguments at: 2.
+	^(body isKindOf: StBlockNode)
+		and: [body arguments size = 1 and: [body temporaries isEmpty]]!
+
+toDoInlinable: n
+	"pure function of the method AST + class scope, so every analysis
+	 walker and every nested codegen agrees (docs/codegen-plan.md).
+	 Inline iff the loop variable is not an ivar name, occurs nowhere in
+	 the method outside to:do: bodies that bind it, and inside this body
+	 is never assigned and never referenced from a nested real
+	 (non-inlined) block."
+	| body v |
+	(self toDoShape: n) ifFalse: [^false].
+	body := n arguments at: 2.
+	v := body arguments first.
+	(classScope indexOfInstVar: v) notNil ifTrue: [^false].
+	(self rootMethodBinds: v) ifTrue: [^false].
+	^self loopVar: v safeInInline: body statements!
+
+rootMethodBinds: v
+	"v declared or mentioned anywhere in the whole method outside
+	 to:do:-shaped bodies binding v"
+	| g root |
+	g := self.
+	[g parentGen notNil] whileTrue: [g := g parentGen].
+	root := g node.
+	(root arguments includes: v) ifTrue: [^true].
+	(root temporaries includes: v) ifTrue: [^true].
+	root statements do: [:s | (self name: v occursIn: s) ifTrue: [^true]].
+	^false!
+
+name: v occursIn: n
+	"any appearance of v in the subtree - reference, assignment target,
+	 or declaration - skipping to:do:-shaped bodies whose own loop
+	 variable is v (they shadow it, whether inlined or not)"
+	(n isKindOf: StVariableNode) ifTrue: [^n name = v].
+	(n isKindOf: StAssignmentNode) ifTrue: [
+		n variable = v ifTrue: [^true].
+		^self name: v occursIn: n expression].
+	(n isKindOf: StReturnNode) ifTrue: [^self name: v occursIn: n expression].
+	(n isKindOf: StCascadeNode) ifTrue: [
+		(self name: v occursIn: n receiver) ifTrue: [^true].
+		n messages do: [:m |
+			m arguments do: [:a | (self name: v occursIn: a) ifTrue: [^true]]].
+		^false].
+	(n isKindOf: StMessageNode) ifTrue: [
+		(self name: v occursIn: n receiver) ifTrue: [^true].
+		((self toDoShape: n) and: [((n arguments at: 2) arguments first) = v])
+			ifTrue: [^self name: v occursIn: (n arguments at: 1)].
+		n arguments do: [:a | (self name: v occursIn: a) ifTrue: [^true]].
+		^false].
+	(n isKindOf: StBlockNode) ifTrue: [
+		(n arguments includes: v) ifTrue: [^true].
+		(n temporaries includes: v) ifTrue: [^true].
+		n statements do: [:s | (self name: v occursIn: s) ifTrue: [^true]].
+		^false].
+	^false!
+
+loopVar: v safeInInline: stmts
+	stmts do: [:s | (self loopVar: v safeIn: s) ifFalse: [^false]].
+	^true!
+
+loopVar: v safeIn: n
+	"walking code that compiles inline in the loop's scope: assignment to
+	 v is out; any occurrence of v inside a block that compiles as a real
+	 closure is out. Macro-flattened blocks are transparent; a nested
+	 to:do: is transparent iff it is itself inlinable (an inner to:do:
+	 that falls back turns its body into a real closure)."
+	| kind |
+	(n isKindOf: StAssignmentNode) ifTrue: [
+		n variable = v ifTrue: [^false].
+		^self loopVar: v safeIn: n expression].
+	(n isKindOf: StReturnNode) ifTrue: [^self loopVar: v safeIn: n expression].
+	(n isKindOf: StCascadeNode) ifTrue: [
+		(self loopVar: v safeIn: n receiver) ifFalse: [^false].
+		n messages do: [:m |
+			m arguments do: [:a |
+				(a isKindOf: StBlockNode)
+					ifTrue: [(self name: v occursIn: a) ifTrue: [^false]]
+					ifFalse: [(self loopVar: v safeIn: a) ifFalse: [^false]]]].
+		^true].
+	(n isKindOf: StBlockNode) ifTrue: [
+		"a block in expression position compiles as a real closure"
+		^(self name: v occursIn: n) not].
+	(n isKindOf: StMessageNode) ifTrue: [
+		kind := self macroKindOf: n.
+		kind isNil ifTrue: [
+			(n receiver isKindOf: StBlockNode)
+				ifTrue: [(self name: v occursIn: n receiver) ifTrue: [^false]]
+				ifFalse: [(self loopVar: v safeIn: n receiver) ifFalse: [^false]].
+			n arguments do: [:a |
+				(a isKindOf: StBlockNode)
+					ifTrue: [(self name: v occursIn: a) ifTrue: [^false]]
+					ifFalse: [(self loopVar: v safeIn: a) ifFalse: [^false]]].
+			^true].
+		kind = #toDo ifTrue: [
+			(self loopVar: v safeIn: n receiver) ifFalse: [^false].
+			(self loopVar: v safeIn: (n arguments at: 1)) ifFalse: [^false].
+			((n arguments at: 2) arguments first) = v ifTrue: [^true].
+			^self loopVar: v safeInInline: (n arguments at: 2) statements].
+		(n receiver isKindOf: StBlockNode)
+			ifTrue: [(self loopVar: v safeInInline: n receiver statements)
+				ifFalse: [^false]]
+			ifFalse: [(self loopVar: v safeIn: n receiver) ifFalse: [^false]].
+		n arguments do: [:a |
+			(a isKindOf: StBlockNode)
+				ifTrue: [(self loopVar: v safeInInline: a statements) ifFalse: [^false]]
+				ifFalse: [(self loopVar: v safeIn: a) ifFalse: [^false]]].
+		^true].
+	^true!
 
 walkMessage: n with: walker
 	"walk a message's parts; macro-inlined literal blocks are traversed
@@ -809,8 +935,15 @@ compileMessage: n to: dest
 	kind = #whileNoBody
 		ifTrue: [^self compileWhile: n receiver body: nil
 			until: (sel = #whileFalse) to: dest].
+	kind = #toDo
+		ifTrue: [^self compileToDo: n to: dest].
 
 	n isSuperSend ifTrue: [^self compileSuperSend: n to: dest].
+
+	"isNil/notNil are sealed selectors of the dialect (docs/codegen-plan.md):
+	 nil tests are identity tests, no send"
+	(args isEmpty and: [sel = #isNil or: [sel = #notNil]]) ifTrue: [
+		^self compileNilTest: n negated: sel = #notNil to: dest].
 
 	"specialized sends (§12): unconditional for the sealed selectors"
 	(self specializedOpFor: sel argc: args size) notNil ifTrue: [
@@ -836,6 +969,19 @@ compileSpecialized: n to: dest
 	op = 'ATPUT'
 		ifTrue: [^self emit: (Array with: op with: dest with: base with: base + 1)].
 	self emit: (Array with: op with: dest with: base with: base + 1)!
+
+compileNilTest: n negated: neg to: dest
+	| base savedSp |
+	savedSp := sp.
+	base := sp.
+	self noteSp: base + 1.
+	self compileExpr: n receiver to: base.
+	sp := base + 1.
+	self emit: (Array with: 'LOADNIL' with: base + 1).
+	sp := savedSp.
+	self noteSp: dest.
+	self emit: (Array with: 'IDEQ' with: dest with: base with: base + 1).
+	neg ifTrue: [self emit: (Array with: 'NOT' with: dest with: dest)]!
 
 compileGeneralSend: n to: dest
 	| r savedSp |
@@ -971,6 +1117,50 @@ compileWhile: condBlk body: bodyBlk until: isUntil to: dest
 			with: insns size - exitJump).
 	self noteSp: dest.
 	self emit: (Array with: 'LOADNIL' with: dest)!
+
+compileToDo: n to: dest
+	"inline X to: Y do: [:v | ...] (docs/codegen-plan.md): the loop
+	 variable lives in a frame slot; LE/ADD fall through to real #<=/#+
+	 sends for non-SmallInteger values, preserving Number semantics.
+	 Answers the receiver, like the kernel fallback."
+	| savedSp recvSlot iSlot limitSlot t body loopStart exitJump |
+	body := n arguments at: 2.
+	savedSp := sp.
+	recvSlot := sp.
+	iSlot := sp + 1.
+	limitSlot := sp + 2.
+	t := sp + 3.
+	self noteSp: t.
+	self compileExpr: n receiver to: recvSlot.
+	sp := recvSlot + 1.
+	self compileExpr: (n arguments at: 1) to: limitSlot.
+	self emit: (Array with: 'MOVE' with: iSlot with: recvSlot).
+	sp := t.
+	loopStart := insns size.
+	self emit: (Array with: 'LE' with: t with: iSlot with: limitSlot).
+	exitJump := self emitPlaceholder.
+	loopBindings add: (Array with: body arguments first with: iSlot).
+	self compileToDoBody: body statements.
+	loopBindings removeLast.
+	self emit: (Array with: 'LOADINT' with: t with: 1).
+	self emit: (Array with: 'ADD' with: iSlot with: iSlot with: t).
+	self emit: (Array with: 'JUMP' with: loopStart - insns size - 1).
+	self patch: exitJump
+		with: (Array with: 'JUMPFALSE' with: t with: insns size - exitJump).
+	sp := savedSp.
+	self noteSp: dest.
+	dest = recvSlot ifFalse: [
+		self emit: (Array with: 'MOVE' with: dest with: recvSlot)]!
+
+compileToDoBody: stmts
+	"all body statements are effect-position (to:do: discards the block's
+	 value); a ^ ends the list (the rest is unreachable)"
+	stmts do: [:stmt |
+		(stmt isKindOf: StReturnNode)
+			ifTrue: [
+				self compileReturn: stmt.
+				^self].
+		self compileExpr: stmt to: sp]!
 
 compileInlineBlock: blk to: dest
 	"inline an argless, templess literal block's statements in the

@@ -134,3 +134,20 @@ testBlockWithOwnTemps
 	self assert: blk mnemonics = (self lines: #(
 		'MOVE 3, 1' 'LOADINT 4, 1' 'ADD 2, 3, 4' 'MOVE 3, 2'
 		'MOVE 3, 2' 'RET 3'))! !
+
+!StCaptureTests methodsFor: 'tests-inline-loops'!
+testBlockInsideInlinedToDoCapturesOuterLocal
+	"a real block created inside an inlined loop body still captures the
+	 method's locals correctly"
+	| spec blk |
+	spec := self compile: 'foo | t r | t := 5. 1 to: 2 do: [:i | r := [t]]. ^r'.
+	blk := self blockSpecIn: spec.
+	self assert: blk numCaptured = 1.
+	self assert: blk mnemonics = (self lines: #('GETIVAR 1, 4' 'RET 1'))!
+
+testMutationInsideInlinedToDoBoxes
+	"t is captured by a block, then mutated inside an inlined loop body:
+	 boxed, exactly as if the assignment were written at method level"
+	| spec |
+	spec := self compile: 'foo | t b | t := 1. b := [t]. 1 to: 3 do: [:i | t := t + 1]. ^b'.
+	self assert: ((spec insns at: 1) at: 1) = 'MKBOX'! !
