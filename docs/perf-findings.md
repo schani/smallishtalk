@@ -193,6 +193,24 @@ structure).
   keeps the compiler's own sources ASCII in `$`-literals (GST native
   file-in limit).
 
+- **2026-07-02, finding 2 completed + `String>>=` callers fixed**
+  (concrete `OrderedCollection>>do:`/`reverseDo:`/`do:separatedBy:`
+  walking the backing store — ivar reads + the Array `AT` fast path, so
+  the per-element cost is just the block activation; `StEncoder`
+  dispatches on an integer mnemonic key — (size, first byte, last byte)
+  is unique across all 41 mnemonics — instead of up to 41 `String>>=`
+  per instruction plus `includes:` scans; `findClass:` and
+  `globalAssocFor:` get the same lookup-only bucket indexes as
+  `symbolFor:`): self-compile **820 → 654 ms (−20%)**, ratio vs GST
+  **2.01× → 1.58×**; cumulative from baseline **2260 → 654 ms (−71%)**.
+  Counters: `at:` fallthroughs 753 k → 35 k, `=` fallthroughs
+  1.02 M → 487 k, staged sends 1.99 M → 0.67 M, total sends
+  12.5 M → 9.7 M. `String>>=` fell 11.2% → 3.9% self. New top:
+  `OrderedCollection>>do:` 10.1% self (now almost pure block-activation
+  cost — further gains need VM work), `isKindOf:` 9.3% (AST node type
+  tests in codegen — the next image-level target), `to:do:` 6.5%,
+  `OrderedCollection>>grow` 5.5% (pre-sizing opportunity).
+
 ## Recommended attack order
 
 1. Hash the symbol table / `Symbol class>>intern:` (finding 1) —

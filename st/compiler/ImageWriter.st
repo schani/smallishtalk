@@ -113,8 +113,9 @@ initMethods
 
 Object subclass: #StImageWriter
 	instanceVariableNames: 'objects nilObj trueObj falseObj symbolNames symbolObjs
-symbolBuckets classes classOrder nextClassIndex globalNames globalAssocs
-smalltalkObj processObj stackObj specialsObj charObjs'
+symbolBuckets classes classBuckets classOrder nextClassIndex globalNames
+globalAssocs globalBuckets smalltalkObj processObj stackObj specialsObj
+charObjs'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'Smallishtalk-Compiler'!
@@ -172,9 +173,11 @@ init
 	symbolObjs := OrderedCollection new.
 	symbolBuckets := Array new: 512.
 	classes := OrderedCollection new.	"of StClassDesc, definition order"
+	classBuckets := Array new: 128.
 	nextClassIndex := Treaty firstUnreservedClassIndex.
 	globalNames := OrderedCollection new.
 	globalAssocs := OrderedCollection new.
+	globalBuckets := Array new: 128.
 	charObjs := OrderedCollection new.	"(code . obj) pairs"
 	nilObj := self addObj: (StObj fixed: Treaty classUndefinedObject slots: 0).
 	trueObj := self addObj: (StObj fixed: Treaty classTrue slots: 0).
@@ -237,22 +240,29 @@ characterForCode: anInteger
 	^o!
 
 globalAssocFor: aName
-	"one shared Association per global name; key is the Symbol"
-	| i a |
-	i := 1.
-	globalNames do: [:n |
-		n = aName ifTrue: [^globalAssocs at: i].
-		i := i + 1].
+	"one shared Association per global name; key is the Symbol. The
+	 bucket index is lookup-only state - creation order is untouched."
+	| h b a |
+	h := (self symbolHash: aName) \\ 128 + 1.
+	b := globalBuckets at: h.
+	b isNil
+		ifTrue: [b := OrderedCollection new. globalBuckets at: h put: b]
+		ifFalse: [
+			b do: [:i | (globalNames at: i) = aName ifTrue: [^globalAssocs at: i]]].
 	a := self addObj: (StObj fixed: Treaty classAssociation slots: 2).
 	a at: 1 put: (self symbolFor: aName).
 	a at: 2 put: nilObj.
 	globalNames add: aName.
 	globalAssocs add: a.
+	b add: globalAssocs size.
 	^a! !
 
 !StImageWriter methodsFor: 'classes'!
 findClass: aName
-	classes do: [:d | d name = aName ifTrue: [^d]].
+	| b |
+	b := classBuckets at: (self symbolHash: aName) \\ 128 + 1.
+	b isNil ifTrue: [^nil].
+	b do: [:d | d name = aName ifTrue: [^d]].
 	^nil!
 
 defineClass: aName superclass: superName instVarNames: ivarList
@@ -276,7 +286,15 @@ defineClass: aName superclass: superName instVarNames: ivarList
 	d classObj: (self addObj: (StObj fixed: d metaIndex slots: 6)).
 	d metaObj: (self addObj: (StObj fixed: Treaty classMetaclass slots: 6)).
 	classes add: d.
+	self classBucketAdd: d.
 	^d!
+
+classBucketAdd: d
+	| h b |
+	h := (self symbolHash: d name) \\ 128 + 1.
+	b := classBuckets at: h.
+	b isNil ifTrue: [b := OrderedCollection new. classBuckets at: h put: b].
+	b add: d!
 
 allInstVarNamesOf: d
 	"inherited first, then own — the codegen scope order"

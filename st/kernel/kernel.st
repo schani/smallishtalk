@@ -909,6 +909,36 @@ asArray
 		r at: i put: (store at: i).
 		i := i + 1].
 	^r!
+do: aBlock
+	"walks the backing store directly: store is an Array (the AT fast
+	 opcode applies) and count is an ivar read, so the per-element cost
+	 is just the block activation. Snapshot iteration, even stronger than
+	 the generic do:'s (store AND count read once; a mid-loop grow swaps
+	 store and we keep walking the old array) - mutation during do: is
+	 unsupported, as documented on SequenceableCollection>>do:."
+	| s n i |
+	s := store.
+	n := count.
+	i := 1.
+	[i <= n] whileTrue: [
+		aBlock value: (s at: i).
+		i := i + 1]!
+reverseDo: aBlock
+	| s i |
+	s := store.
+	i := count.
+	[i >= 1] whileTrue: [
+		aBlock value: (s at: i).
+		i := i - 1]!
+do: aBlock separatedBy: sepBlock
+	| s n i |
+	s := store.
+	n := count.
+	i := 1.
+	[i <= n] whileTrue: [
+		i > 1 ifTrue: [sepBlock value].
+		aBlock value: (s at: i).
+		i := i + 1]!
 species
 	^OrderedCollection!
 copyFrom: start to: stop
