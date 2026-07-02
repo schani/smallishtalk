@@ -1,0 +1,14 @@
+[package]
+name = "smallishtalk"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "smallishtalk"
+path = "src/lib.rs"
+
+[[bin]]
+name = "smallishtalk"
+path = "src/main.rs"
+
+[dependencies]

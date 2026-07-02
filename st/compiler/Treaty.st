@@ -1,0 +1,975 @@
+"GENERATED from treaty.json by `cargo run --bin gen_treaty_st` — DO NOT EDIT.
+The Treaty (SPEC Appendix A): the binary contract between the VM and the
+compiler. One class-side method per constant."
+
+Object subclass: #Treaty
+	instanceVariableNames: ''
+	classVariableNames: ''
+	poolDictionaries: ''
+	category: 'Smallishtalk-Compiler'!
+
+!Treaty class methodsFor: 'constants'!
+tagIntBit
+	"tags::TAG_INT_BIT"
+	^1!
+tagPtrMask
+	"tags::TAG_PTR_MASK"
+	^7!
+tagPtr
+	"tags::TAG_PTR"
+	^0!
+tagFloatImm
+	"tags::TAG_FLOAT_IMM"
+	^2!
+smallintBits
+	"tags::SMALLINT_BITS"
+	^63!
+hdrClassShift
+	"header::HDR_CLASS_SHIFT"
+	^42!
+hdrClassBits
+	"header::HDR_CLASS_BITS"
+	^22!
+hdrHashShift
+	"header::HDR_HASH_SHIFT"
+	^20!
+hdrHashBits
+	"header::HDR_HASH_BITS"
+	^22!
+hdrNslotsShift
+	"header::HDR_NSLOTS_SHIFT"
+	^12!
+hdrNslotsBits
+	"header::HDR_NSLOTS_BITS"
+	^8!
+hdrNslotsOverflow
+	"header::HDR_NSLOTS_OVERFLOW"
+	^255!
+hdrFormatShift
+	"header::HDR_FORMAT_SHIFT"
+	^8!
+hdrFormatBits
+	"header::HDR_FORMAT_BITS"
+	^4!
+hdrGcShift
+	"header::HDR_GC_SHIFT"
+	^0!
+hdrGcBits
+	"header::HDR_GC_BITS"
+	^8!
+gcBitMark
+	"header::GC_BIT_MARK"
+	^1!
+gcBitRemembered
+	"header::GC_BIT_REMEMBERED"
+	^2!
+gcBitPinned
+	"header::GC_BIT_PINNED"
+	^4!
+gcAgeShift
+	"header::GC_AGE_SHIFT"
+	^3!
+gcAgeBits
+	"header::GC_AGE_BITS"
+	^3!
+gcBitImmutable
+	"header::GC_BIT_IMMUTABLE"
+	^128!
+fmtFixed
+	"formats::FMT_FIXED"
+	^0!
+fmtPtrs
+	"formats::FMT_PTRS"
+	^1!
+fmtBytesBase
+	"formats::FMT_BYTES_BASE"
+	^8!
+frameCaller
+	"frame::FRAME_CALLER"
+	^0!
+frameRetinfo
+	"frame::FRAME_RETINFO"
+	^1!
+frameMethod
+	"frame::FRAME_METHOD"
+	^2!
+frameFlags
+	"frame::FRAME_FLAGS"
+	^3!
+frameReceiver
+	"frame::FRAME_RECEIVER"
+	^4!
+frameFixed
+	"frame::FRAME_FIXED"
+	^5!
+flagHandler
+	"frame::FLAG_HANDLER"
+	^1!
+flagEnsure
+	"frame::FLAG_ENSURE"
+	^2!
+flagBlockctx
+	"frame::FLAG_BLOCKCTX"
+	^4!
+flagUnwindcont
+	"frame::FLAG_UNWINDCONT"
+	^8!
+serialShift
+	"frame::SERIAL_SHIFT"
+	^32!
+retinfoDestBits
+	"frame::RETINFO_DEST_BITS"
+	^8!
+retinfoPcShift
+	"frame::RETINFO_PC_SHIFT"
+	^8!
+stackOwner
+	"stack_slots::STACK_OWNER"
+	^0!
+stackFramesBase
+	"stack_slots::STACK_FRAMES_BASE"
+	^1!
+mdictKeys
+	"method_dictionary_slots::MDICT_KEYS"
+	^0!
+mdictValues
+	"method_dictionary_slots::MDICT_VALUES"
+	^1!
+mdictNumVmSlots
+	"method_dictionary_slots::MDICT_NUM_VM_SLOTS"
+	^2!
+listHead
+	"linked_list_slots::LIST_HEAD"
+	^0!
+listTail
+	"linked_list_slots::LIST_TAIL"
+	^1!
+listNumVmSlots
+	"linked_list_slots::LIST_NUM_VM_SLOTS"
+	^2!
+handlerSlotClass
+	"handler_slots::HANDLER_SLOT_CLASS"
+	^0!
+handlerSlotBlock
+	"handler_slots::HANDLER_SLOT_BLOCK"
+	^1!
+handlerSlotState
+	"handler_slots::HANDLER_SLOT_STATE"
+	^2!
+handlerStateArmed
+	"handler_slots::HANDLER_STATE_ARMED"
+	^1!
+handlerStateInProgress
+	"handler_slots::HANDLER_STATE_IN_PROGRESS"
+	^2!
+ensureSlotBlock
+	"handler_slots::ENSURE_SLOT_BLOCK"
+	^0!
+ensureSlotPendingTarget
+	"handler_slots::ENSURE_SLOT_PENDING_TARGET"
+	^1!
+ensureSlotPendingSerial
+	"handler_slots::ENSURE_SLOT_PENDING_SERIAL"
+	^2!
+ensureSlotPendingValue
+	"handler_slots::ENSURE_SLOT_PENDING_VALUE"
+	^3!
+specselPlus
+	"specialized_selectors::SPECSEL_PLUS"
+	^0!
+specselMinus
+	"specialized_selectors::SPECSEL_MINUS"
+	^1!
+specselTimes
+	"specialized_selectors::SPECSEL_TIMES"
+	^2!
+specselIntDiv
+	"specialized_selectors::SPECSEL_INT_DIV"
+	^3!
+specselMod
+	"specialized_selectors::SPECSEL_MOD"
+	^4!
+specselLt
+	"specialized_selectors::SPECSEL_LT"
+	^5!
+specselGt
+	"specialized_selectors::SPECSEL_GT"
+	^6!
+specselLe
+	"specialized_selectors::SPECSEL_LE"
+	^7!
+specselGe
+	"specialized_selectors::SPECSEL_GE"
+	^8!
+specselEq
+	"specialized_selectors::SPECSEL_EQ"
+	^9!
+specselIdentical
+	"specialized_selectors::SPECSEL_IDENTICAL"
+	^10!
+specselAt
+	"specialized_selectors::SPECSEL_AT"
+	^11!
+specselAtPut
+	"specialized_selectors::SPECSEL_AT_PUT"
+	^12!
+specselSize
+	"specialized_selectors::SPECSEL_SIZE"
+	^13!
+specselClass
+	"specialized_selectors::SPECSEL_CLASS"
+	^14!
+specselNot
+	"specialized_selectors::SPECSEL_NOT"
+	^15!
+specselCount
+	"specialized_selectors::SPECSEL_COUNT"
+	^16!
+classObject
+	"classes::CLASS_OBJECT"
+	^1!
+classBehavior
+	"classes::CLASS_BEHAVIOR"
+	^2!
+classClass
+	"classes::CLASS_CLASS"
+	^3!
+classMetaclass
+	"classes::CLASS_METACLASS"
+	^4!
+classUndefinedObject
+	"classes::CLASS_UNDEFINED_OBJECT"
+	^5!
+classTrue
+	"classes::CLASS_TRUE"
+	^6!
+classFalse
+	"classes::CLASS_FALSE"
+	^7!
+classSmallinteger
+	"classes::CLASS_SMALLINTEGER"
+	^8!
+classFloat
+	"classes::CLASS_FLOAT"
+	^9!
+classCharacter
+	"classes::CLASS_CHARACTER"
+	^10!
+classString
+	"classes::CLASS_STRING"
+	^11!
+classBytestring
+	"classes::CLASS_BYTESTRING"
+	^12!
+classSymbol
+	"classes::CLASS_SYMBOL"
+	^13!
+classLargePositiveInteger
+	"classes::CLASS_LARGE_POSITIVE_INTEGER"
+	^14!
+classLargeNegativeInteger
+	"classes::CLASS_LARGE_NEGATIVE_INTEGER"
+	^15!
+classArray
+	"classes::CLASS_ARRAY"
+	^16!
+classBytearray
+	"classes::CLASS_BYTEARRAY"
+	^17!
+classOrderedCollection
+	"classes::CLASS_ORDERED_COLLECTION"
+	^18!
+classAssociation
+	"classes::CLASS_ASSOCIATION"
+	^19!
+classBox
+	"classes::CLASS_BOX"
+	^20!
+classBlockclosure
+	"classes::CLASS_BLOCKCLOSURE"
+	^21!
+classCompiledmethod
+	"classes::CLASS_COMPILEDMETHOD"
+	^22!
+classCompiledblock
+	"classes::CLASS_COMPILEDBLOCK"
+	^23!
+classProcess
+	"classes::CLASS_PROCESS"
+	^24!
+classSemaphore
+	"classes::CLASS_SEMAPHORE"
+	^25!
+classMethoddictionary
+	"classes::CLASS_METHODDICTIONARY"
+	^26!
+classProcessorScheduler
+	"classes::CLASS_PROCESSOR_SCHEDULER"
+	^27!
+classMessage
+	"classes::CLASS_MESSAGE"
+	^28!
+classSystemDictionary
+	"classes::CLASS_SYSTEM_DICTIONARY"
+	^29!
+classStack
+	"classes::CLASS_STACK"
+	^30!
+classLinkedList
+	"classes::CLASS_LINKED_LIST"
+	^31!
+firstUnreservedClassIndex
+	"classes::FIRST_UNRESERVED_CLASS_INDEX"
+	^64!
+behaviorSuperclass
+	"behavior_slots::BEHAVIOR_SUPERCLASS"
+	^0!
+behaviorMethodDictionary
+	"behavior_slots::BEHAVIOR_METHOD_DICTIONARY"
+	^1!
+behaviorFormatAndSlots
+	"behavior_slots::BEHAVIOR_FORMAT_AND_SLOTS"
+	^2!
+behaviorClassIndex
+	"behavior_slots::BEHAVIOR_CLASS_INDEX"
+	^3!
+behaviorNumVmSlots
+	"behavior_slots::BEHAVIOR_NUM_VM_SLOTS"
+	^4!
+formatAndSlotsFormatShift
+	"behavior_slots::FORMAT_AND_SLOTS_FORMAT_SHIFT"
+	^16!
+formatAndSlotsNslotsMask
+	"behavior_slots::FORMAT_AND_SLOTS_NSLOTS_MASK"
+	^65535!
+processStack
+	"process_slots::PROCESS_STACK"
+	^0!
+processFrameOffset
+	"process_slots::PROCESS_FRAME_OFFSET"
+	^1!
+processPc
+	"process_slots::PROCESS_PC"
+	^2!
+processPriority
+	"process_slots::PROCESS_PRIORITY"
+	^3!
+processNextLink
+	"process_slots::PROCESS_NEXT_LINK"
+	^4!
+processMyList
+	"process_slots::PROCESS_MY_LIST"
+	^5!
+processSerialCounter
+	"process_slots::PROCESS_SERIAL_COUNTER"
+	^6!
+processNumVmSlots
+	"process_slots::PROCESS_NUM_VM_SLOTS"
+	^7!
+semaphoreExcessSignals
+	"semaphore_slots::SEMAPHORE_EXCESS_SIGNALS"
+	^0!
+semaphoreQueueHead
+	"semaphore_slots::SEMAPHORE_QUEUE_HEAD"
+	^1!
+semaphoreQueueTail
+	"semaphore_slots::SEMAPHORE_QUEUE_TAIL"
+	^2!
+semaphoreNumVmSlots
+	"semaphore_slots::SEMAPHORE_NUM_VM_SLOTS"
+	^3!
+schedulerQueues
+	"scheduler_slots::SCHEDULER_QUEUES"
+	^0!
+schedulerActiveProcess
+	"scheduler_slots::SCHEDULER_ACTIVE_PROCESS"
+	^1!
+schedulerNumVmSlots
+	"scheduler_slots::SCHEDULER_NUM_VM_SLOTS"
+	^2!
+numPriorities
+	"scheduler_slots::NUM_PRIORITIES"
+	^8!
+methodHeader
+	"compiled_method_slots::METHOD_HEADER"
+	^0!
+methodBytecodes
+	"compiled_method_slots::METHOD_BYTECODES"
+	^1!
+methodLiterals
+	"compiled_method_slots::METHOD_LITERALS"
+	^2!
+methodSendSites
+	"compiled_method_slots::METHOD_SEND_SITES"
+	^3!
+methodSelector
+	"compiled_method_slots::METHOD_SELECTOR"
+	^4!
+methodClass
+	"compiled_method_slots::METHOD_CLASS"
+	^5!
+methodSourceInfo
+	"compiled_method_slots::METHOD_SOURCE_INFO"
+	^6!
+methodNumSlots
+	"compiled_method_slots::METHOD_NUM_SLOTS"
+	^7!
+blockHeader
+	"compiled_block_slots::BLOCK_HEADER"
+	^0!
+blockBytecodes
+	"compiled_block_slots::BLOCK_BYTECODES"
+	^1!
+blockLiterals
+	"compiled_block_slots::BLOCK_LITERALS"
+	^2!
+blockSendSites
+	"compiled_block_slots::BLOCK_SEND_SITES"
+	^3!
+blockOuterMethod
+	"compiled_block_slots::BLOCK_OUTER_METHOD"
+	^4!
+blockInfo
+	"compiled_block_slots::BLOCK_INFO"
+	^5!
+blockNumSlots
+	"compiled_block_slots::BLOCK_NUM_SLOTS"
+	^6!
+mhFrameSlotsShift
+	"method_header::MH_FRAME_SLOTS_SHIFT"
+	^0!
+mhFrameSlotsBits
+	"method_header::MH_FRAME_SLOTS_BITS"
+	^8!
+mhArgcShift
+	"method_header::MH_ARGC_SHIFT"
+	^8!
+mhArgcBits
+	"method_header::MH_ARGC_BITS"
+	^4!
+mhPrimitiveShift
+	"method_header::MH_PRIMITIVE_SHIFT"
+	^12!
+mhPrimitiveBits
+	"method_header::MH_PRIMITIVE_BITS"
+	^12!
+mhHasPrimitiveShift
+	"method_header::MH_HAS_PRIMITIVE_SHIFT"
+	^24!
+mhHandlerSlotBaseShift
+	"method_header::MH_HANDLER_SLOT_BASE_SHIFT"
+	^25!
+mhHandlerSlotBaseBits
+	"method_header::MH_HANDLER_SLOT_BASE_BITS"
+	^8!
+mhFlagsShift
+	"method_header::MH_FLAGS_SHIFT"
+	^33!
+mhFlagIsHandler
+	"method_header::MH_FLAG_IS_HANDLER"
+	^1!
+mhFlagIsEnsure
+	"method_header::MH_FLAG_IS_ENSURE"
+	^2!
+biNumCapturedShift
+	"block_info::BI_NUM_CAPTURED_SHIFT"
+	^0!
+biNumCapturedBits
+	"block_info::BI_NUM_CAPTURED_BITS"
+	^8!
+biHasNlrShift
+	"block_info::BI_HAS_NLR_SHIFT"
+	^8!
+closureCompiledBlock
+	"closure_slots::CLOSURE_COMPILED_BLOCK"
+	^0!
+closureHomeProcess
+	"closure_slots::CLOSURE_HOME_PROCESS"
+	^1!
+closureHomeOffset
+	"closure_slots::CLOSURE_HOME_OFFSET"
+	^2!
+closureHomeSerial
+	"closure_slots::CLOSURE_HOME_SERIAL"
+	^3!
+closureCapturedBase
+	"closure_slots::CLOSURE_CAPTURED_BASE"
+	^4!
+siteSelector
+	"send_site::SITE_SELECTOR"
+	^0!
+siteArgc
+	"send_site::SITE_ARGC"
+	^1!
+siteCacheClass
+	"send_site::SITE_CACHE_CLASS"
+	^2!
+siteCacheMethod
+	"send_site::SITE_CACHE_METHOD"
+	^3!
+siteStaticClass
+	"send_site::SITE_STATIC_CLASS"
+	^4!
+siteStride
+	"send_site::SITE_STRIDE"
+	^5!
+specialNil
+	"special_objects::SPECIAL_NIL"
+	^0!
+specialTrue
+	"special_objects::SPECIAL_TRUE"
+	^1!
+specialFalse
+	"special_objects::SPECIAL_FALSE"
+	^2!
+specialSmalltalk
+	"special_objects::SPECIAL_SMALLTALK"
+	^3!
+specialProcessor
+	"special_objects::SPECIAL_PROCESSOR"
+	^4!
+specialClassList
+	"special_objects::SPECIAL_CLASS_LIST"
+	^5!
+specialSymbolTable
+	"special_objects::SPECIAL_SYMBOL_TABLE"
+	^6!
+specialSpecializedSelectors
+	"special_objects::SPECIAL_SPECIALIZED_SELECTORS"
+	^7!
+specialSelDoesNotUnderstand
+	"special_objects::SPECIAL_SEL_DOES_NOT_UNDERSTAND"
+	^8!
+specialSelMustBeBoolean
+	"special_objects::SPECIAL_SEL_MUST_BE_BOOLEAN"
+	^9!
+specialTerminateTrampoline
+	"special_objects::SPECIAL_TERMINATE_TRAMPOLINE"
+	^10!
+specialLowSpaceSemaphore
+	"special_objects::SPECIAL_LOW_SPACE_SEMAPHORE"
+	^11!
+specialTimerSemaphore
+	"special_objects::SPECIAL_TIMER_SEMAPHORE"
+	^12!
+specialObjectsCount
+	"special_objects::SPECIAL_OBJECTS_COUNT"
+	^13!
+primClass
+	"primitives::PRIM_CLASS"
+	^1!
+primIdentityHash
+	"primitives::PRIM_IDENTITY_HASH"
+	^2!
+primIdentical
+	"primitives::PRIM_IDENTICAL"
+	^3!
+primNew
+	"primitives::PRIM_NEW"
+	^4!
+primNewSized
+	"primitives::PRIM_NEW_SIZED"
+	^5!
+primAt
+	"primitives::PRIM_AT"
+	^6!
+primAtPut
+	"primitives::PRIM_AT_PUT"
+	^7!
+primSize
+	"primitives::PRIM_SIZE"
+	^8!
+primInstVarAt
+	"primitives::PRIM_INST_VAR_AT"
+	^9!
+primInstVarAtPut
+	"primitives::PRIM_INST_VAR_AT_PUT"
+	^10!
+primPerformWithArgs
+	"primitives::PRIM_PERFORM_WITH_ARGS"
+	^11!
+primIntAdd
+	"primitives::PRIM_INT_ADD"
+	^100!
+primIntSub
+	"primitives::PRIM_INT_SUB"
+	^101!
+primIntMul
+	"primitives::PRIM_INT_MUL"
+	^102!
+primIntDiv
+	"primitives::PRIM_INT_DIV"
+	^103!
+primIntMod
+	"primitives::PRIM_INT_MOD"
+	^104!
+primIntQuo
+	"primitives::PRIM_INT_QUO"
+	^105!
+primIntLt
+	"primitives::PRIM_INT_LT"
+	^106!
+primIntGt
+	"primitives::PRIM_INT_GT"
+	^107!
+primIntLe
+	"primitives::PRIM_INT_LE"
+	^108!
+primIntGe
+	"primitives::PRIM_INT_GE"
+	^109!
+primIntEq
+	"primitives::PRIM_INT_EQ"
+	^110!
+primIntBitAnd
+	"primitives::PRIM_INT_BIT_AND"
+	^111!
+primIntBitOr
+	"primitives::PRIM_INT_BIT_OR"
+	^112!
+primIntBitXor
+	"primitives::PRIM_INT_BIT_XOR"
+	^113!
+primIntBitShift
+	"primitives::PRIM_INT_BIT_SHIFT"
+	^114!
+primIntAsFloat
+	"primitives::PRIM_INT_AS_FLOAT"
+	^115!
+primFloatAdd
+	"primitives::PRIM_FLOAT_ADD"
+	^130!
+primFloatSub
+	"primitives::PRIM_FLOAT_SUB"
+	^131!
+primFloatMul
+	"primitives::PRIM_FLOAT_MUL"
+	^132!
+primFloatDiv
+	"primitives::PRIM_FLOAT_DIV"
+	^133!
+primFloatLt
+	"primitives::PRIM_FLOAT_LT"
+	^134!
+primFloatGt
+	"primitives::PRIM_FLOAT_GT"
+	^135!
+primFloatLe
+	"primitives::PRIM_FLOAT_LE"
+	^136!
+primFloatGe
+	"primitives::PRIM_FLOAT_GE"
+	^137!
+primFloatEq
+	"primitives::PRIM_FLOAT_EQ"
+	^138!
+primFloatTruncated
+	"primitives::PRIM_FLOAT_TRUNCATED"
+	^139!
+primFloatSqrt
+	"primitives::PRIM_FLOAT_SQRT"
+	^140!
+primBlockValue0
+	"primitives::PRIM_BLOCK_VALUE_0"
+	^200!
+primBlockValue1
+	"primitives::PRIM_BLOCK_VALUE_1"
+	^201!
+primBlockValue2
+	"primitives::PRIM_BLOCK_VALUE_2"
+	^202!
+primBlockValue3
+	"primitives::PRIM_BLOCK_VALUE_3"
+	^203!
+primBlockValue4
+	"primitives::PRIM_BLOCK_VALUE_4"
+	^204!
+primBlockValueArgs
+	"primitives::PRIM_BLOCK_VALUE_ARGS"
+	^205!
+primTransferTo
+	"primitives::PRIM_TRANSFER_TO"
+	^210!
+primSemaphoreWait
+	"primitives::PRIM_SEMAPHORE_WAIT"
+	^211!
+primSemaphoreSignal
+	"primitives::PRIM_SEMAPHORE_SIGNAL"
+	^212!
+primYield
+	"primitives::PRIM_YIELD"
+	^213!
+primProcessSuspend
+	"primitives::PRIM_PROCESS_SUSPEND"
+	^214!
+primProcessResume
+	"primitives::PRIM_PROCESS_RESUME"
+	^215!
+primProcessTerminate
+	"primitives::PRIM_PROCESS_TERMINATE"
+	^216!
+primFindHandler
+	"primitives::PRIM_FIND_HANDLER"
+	^220!
+primUnwindTo
+	"primitives::PRIM_UNWIND_TO"
+	^221!
+primHandlerInfo
+	"primitives::PRIM_HANDLER_INFO"
+	^222!
+primSetHandlerState
+	"primitives::PRIM_SET_HANDLER_STATE"
+	^223!
+primSignalContext
+	"primitives::PRIM_SIGNAL_CONTEXT"
+	^224!
+primFileOpen
+	"primitives::PRIM_FILE_OPEN"
+	^300!
+primFileClose
+	"primitives::PRIM_FILE_CLOSE"
+	^301!
+primFileRead
+	"primitives::PRIM_FILE_READ"
+	^302!
+primFileWrite
+	"primitives::PRIM_FILE_WRITE"
+	^303!
+primFilePosition
+	"primitives::PRIM_FILE_POSITION"
+	^304!
+primFileSetPosition
+	"primitives::PRIM_FILE_SET_POSITION"
+	^305!
+primFileSize
+	"primitives::PRIM_FILE_SIZE"
+	^306!
+primFileDelete
+	"primitives::PRIM_FILE_DELETE"
+	^307!
+primStdioWrite
+	"primitives::PRIM_STDIO_WRITE"
+	^310!
+primStdioRead
+	"primitives::PRIM_STDIO_READ"
+	^311!
+primClockMonotonicMs
+	"primitives::PRIM_CLOCK_MONOTONIC_MS"
+	^320!
+primClockWallMs
+	"primitives::PRIM_CLOCK_WALL_MS"
+	^321!
+primSignalAtMs
+	"primitives::PRIM_SIGNAL_AT_MS"
+	^322!
+primNextEvent
+	"primitives::PRIM_NEXT_EVENT"
+	^330!
+primPixelBlit
+	"primitives::PRIM_PIXEL_BLIT"
+	^331!
+primSnapshot
+	"primitives::PRIM_SNAPSHOT"
+	^400!
+primRegisterClass
+	"primitives::PRIM_REGISTER_CLASS"
+	^401!
+primMethodInstall
+	"primitives::PRIM_METHOD_INSTALL"
+	^402!
+primFlushCaches
+	"primitives::PRIM_FLUSH_CACHES"
+	^403!
+primFrameInfo
+	"primitives::PRIM_FRAME_INFO"
+	^410!
+primTableSize
+	"primitives::PRIM_TABLE_SIZE"
+	^4096!
+imgMagicOffset
+	"image_header::IMG_MAGIC_OFFSET"
+	^0!
+imgVersionOffset
+	"image_header::IMG_VERSION_OFFSET"
+	^4!
+imgFlagsOffset
+	"image_header::IMG_FLAGS_OFFSET"
+	^8!
+imgSavedBaseOffset
+	"image_header::IMG_SAVED_BASE_OFFSET"
+	^16!
+imgOldSpaceSizeOffset
+	"image_header::IMG_OLD_SPACE_SIZE_OFFSET"
+	^24!
+imgSpecialObjectsOffset
+	"image_header::IMG_SPECIAL_OBJECTS_OFFSET"
+	^32!
+imgClassListOffset
+	"image_header::IMG_CLASS_LIST_OFFSET"
+	^40!
+imgActiveProcessOffset
+	"image_header::IMG_ACTIVE_PROCESS_OFFSET"
+	^48!
+imgReservedOffset
+	"image_header::IMG_RESERVED_OFFSET"
+	^56!
+imgHeaderSize
+	"image_header::IMG_HEADER_SIZE"
+	^64!
+imgMagic
+	"image_header::IMG_MAGIC"
+	^1296651347!
+maxFrameSlots
+	"limits::MAX_FRAME_SLOTS"
+	^255!
+maxMethodInstructions
+	"limits::MAX_METHOD_INSTRUCTIONS"
+	^65536!
+maxLiterals
+	"limits::MAX_LITERALS"
+	^65536!
+maxSendSites
+	"limits::MAX_SEND_SITES"
+	^255!
+lookupCacheSize
+	"limits::LOOKUP_CACHE_SIZE"
+	^4096!
+initialStackBytes
+	"limits::INITIAL_STACK_BYTES"
+	^4096!
+defaultMaxStackBytes
+	"limits::DEFAULT_MAX_STACK_BYTES"
+	^16777216!
+youngSpaceBytesDefault
+	"limits::YOUNG_SPACE_BYTES_DEFAULT"
+	^8388608!
+largeObjectBytes
+	"limits::LARGE_OBJECT_BYTES"
+	^65536!
+tenureAge
+	"limits::TENURE_AGE"
+	^4!
+opNop
+	"opcodes::NOP"
+	^0!
+opBreak
+	"opcodes::BREAK"
+	^1!
+opMove
+	"opcodes::MOVE"
+	^16!
+opLoadk
+	"opcodes::LOADK"
+	^17!
+opLoadint
+	"opcodes::LOADINT"
+	^18!
+opLoadnil
+	"opcodes::LOADNIL"
+	^19!
+opLoadtrue
+	"opcodes::LOADTRUE"
+	^20!
+opLoadfalse
+	"opcodes::LOADFALSE"
+	^21!
+opLoadself
+	"opcodes::LOADSELF"
+	^22!
+opGetivar
+	"opcodes::GETIVAR"
+	^23!
+opSetivar
+	"opcodes::SETIVAR"
+	^24!
+opGetbox
+	"opcodes::GETBOX"
+	^25!
+opSetbox
+	"opcodes::SETBOX"
+	^26!
+opMkbox
+	"opcodes::MKBOX"
+	^27!
+opSend
+	"opcodes::SEND"
+	^32!
+opSendsuper
+	"opcodes::SENDSUPER"
+	^33!
+opRet
+	"opcodes::RET"
+	^34!
+opRetself
+	"opcodes::RETSELF"
+	^35!
+opNlr
+	"opcodes::NLR"
+	^36!
+opPrim
+	"opcodes::PRIM"
+	^37!
+opMkclosure
+	"opcodes::MKCLOSURE"
+	^38!
+opCapture
+	"opcodes::CAPTURE"
+	^39!
+opJump
+	"opcodes::JUMP"
+	^40!
+opJumptrue
+	"opcodes::JUMPTRUE"
+	^41!
+opJumpfalse
+	"opcodes::JUMPFALSE"
+	^42!
+opAdd
+	"opcodes::ADD"
+	^48!
+opSub
+	"opcodes::SUB"
+	^49!
+opMul
+	"opcodes::MUL"
+	^50!
+opDiv
+	"opcodes::DIV"
+	^51!
+opMod
+	"opcodes::MOD"
+	^52!
+opLt
+	"opcodes::LT"
+	^53!
+opGt
+	"opcodes::GT"
+	^54!
+opLe
+	"opcodes::LE"
+	^55!
+opGe
+	"opcodes::GE"
+	^56!
+opEqnum
+	"opcodes::EQNUM"
+	^57!
+opAt
+	"opcodes::AT"
+	^64!
+opAtput
+	"opcodes::ATPUT"
+	^65!
+opSize
+	"opcodes::SIZE"
+	^66!
+opClassof
+	"opcodes::CLASSOF"
+	^67!
+opNot
+	"opcodes::NOT"
+	^68!
+opIdeq
+	"opcodes::IDEQ"
+	^69!
+ !
