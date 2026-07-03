@@ -51,6 +51,34 @@ fn drive(name: &str, driver_src: &str) -> String {
     result
 }
 
+/// Build+run a driver with host events injected before the run, so the image's
+/// pumpEvents drains them (used to test click routing).
+fn drive_with_events(name: &str, driver_src: &str, events: &[[i64; 5]]) -> String {
+    let dir = std::env::temp_dir().join(format!("smallishtalk-uibr-{}-{name}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let image = dir.join(format!("{name}.im"));
+    let driver_path = dir.join(format!("{name}.driver.st"));
+    std::fs::write(&driver_path, driver_src).unwrap();
+    let tool = format!("{}/st/tools/build_ui_image.st", root());
+    let out = Command::new("gst")
+        .arg("-Q").args(compiler_sources()).arg(&tool)
+        .arg("-a").arg(&driver_path).arg(&image)
+        .current_dir(root()).output().expect("run gst");
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("IMAGE-WRITTEN"),
+        "build failed:\n{}", String::from_utf8_lossy(&out.stderr)
+    );
+    let mut vm = Vm::load_image(image.to_str().unwrap(), VmConfig::default()).expect("load");
+    for e in events {
+        vm.host.push_event(*e);
+    }
+    let active = vm.active_process;
+    vm.run(active).expect("run");
+    let result = String::from_utf8_lossy(&std::mem::take(&mut vm.stdout_capture)).into_owned();
+    std::fs::remove_dir_all(&dir).ok();
+    result
+}
+
 #[test]
 fn browser_navigates_the_reflection_model() {
     let driver = r#"
@@ -168,4 +196,30 @@ w printIt.
 Transcript showCr: w contents.
 "#;
     assert_eq!(drive("workspace", driver), "42\n10 - 3 7\n");
+}
+
+#[test]
+fn browser_click_navigates() {
+    // A real mouse-down routed through the UISupervisor -> the browser -> the
+    // class list pane under the pointer selects a class and navigation fires.
+    // This is what makes a windowed browser interactive; tested headlessly.
+    let driver = r#"
+| d b s |
+Smalltalk organization classify: (Smalltalk classNamed: 'Array') under: 'Collections'.
+Smalltalk organization classify: (Smalltalk classNamed: 'String') under: 'Collections'.
+d := Display width: 240 height: 120.
+b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 240 y: 120)).
+b selectCategoryNamed: 'Collections'.
+s := UISupervisor on: d.
+s rootView: b.
+s pumpEvents.
+Transcript showCr: b currentClass isNil printString.
+b currentClass notNil ifTrue: [Transcript showCr: b currentClass name asString].
+Transcript showCr: b protocolNames isEmpty printString.
+"#;
+    // The class-list pane occupies x[60,120), y[0,48); a click at (65,4) hits
+    // its first row = String (class-index order in 'Collections').
+    let events = [[2i64, 65, 4, 1, 1]]; // mouse button, x=65 y=4, left, down
+    let out = drive_with_events("click", driver, &events);
+    assert_eq!(out, "false\nString\nfalse\n");
 }

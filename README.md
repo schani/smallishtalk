@@ -67,7 +67,18 @@ class / protocol / selector lists over the retained live source of
 `OrderedCollection>>add:`. (Text renders uppercase — the v1 baked-in strike font
 maps lowercase to uppercase.)*
 
-A UI image bundles the kernel, the compiler (for live compilation) and the UI
+**Quick start** — one command from a fresh checkout builds the VM,
+cross-compiles a UI image and runs it:
+
+```sh
+make ui            # headless: renders the Class Browser to ./ui-screenshot.png
+make ui-window     # a live, click-navigable window (needs the `ui` feature + a display)
+```
+
+(`make ui` needs a Rust toolchain and `gst`; it opens no window, so it works
+over SSH and in CI. `scripts/run-ui.sh [--window]` is the underlying script.)
+
+Under the hood, a UI image bundles the kernel, the compiler (for live compilation) and the UI
 layers, plus a driver program of ordinary Smalltalk. Build one and run it:
 
 ```sh

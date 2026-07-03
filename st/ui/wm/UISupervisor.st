@@ -6,7 +6,7 @@
  window-close event."
 
 Object subclass: #UISupervisor
-	instanceVariableNames: 'display running probe'
+	instanceVariableNames: 'display running probe rootView'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'UI-WindowManager'!
@@ -30,7 +30,13 @@ display
 probe
 	^probe!
 running
-	^running! !
+	^running!
+rootView
+	^rootView!
+rootView: aView
+	"a single top-level app view (e.g. a ClassBrowser) filling the display;
+	 when set, the loop paints and routes events to it instead of the WM tracks."
+	rootView := aView! !
 
 !UISupervisor methodsFor: 'events'!
 pumpEvents
@@ -45,9 +51,9 @@ pumpEvents
 dispatch: anEvent
 	anEvent isClose ifTrue: [running := false. ^self].
 	anEvent isMouseMove ifTrue: [
-		display cursorX: anEvent position x y: anEvent position y.
-		^self].
-	"keystrokes and button hits are routed to widgets in M3."
+		display cursorX: anEvent position x y: anEvent position y].
+	"route buttons and keystrokes (and move) to the app view, if any."
+	rootView notNil ifTrue: [rootView handleEvent: anEvent].
 	^self! !
 
 !UISupervisor methodsFor: 'the loop'!
@@ -55,10 +61,18 @@ runStep
 	"one UI iteration, instrumented per phase (UI.md §13)."
 	probe startFrame.
 	probe phase: #events do: [self pumpEvents].
-	probe phase: #paint do: [display draw].
+	probe phase: #paint do: [self paint].
 	probe phase: #present do: [display flush].
 	probe endFrame.
 	^self!
+paint
+	"paint the app view filling the display if one is set, else the WM tracks."
+	| canvas |
+	rootView isNil ifTrue: [^display draw].
+	display form fill: 0.
+	canvas := Canvas on: display form.
+	rootView displayOn: canvas.
+	display blitCursorXor!
 run
 	"the live windowed loop; not used by headless tests (it would not
 	 terminate until a window-close event arrives)."

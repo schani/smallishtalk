@@ -147,6 +147,17 @@ printIt
 	sourcePane contents: sourcePane contents , ' ' , lastResult printString.
 	^lastResult! !
 
+!ClassBrowser methodsFor: 'events'!
+handleEvent: anEvent
+	"route a click to the list/source pane under the pointer (which selects,
+	 firing navigation); route keystrokes to the source pane."
+	| target |
+	anEvent isKeystroke ifTrue: [^sourcePane handleEvent: anEvent].
+	(anEvent isMouseButton or: [anEvent isMouseMove]) ifTrue: [
+		target := self viewAt: anEvent position.
+		(target notNil and: [target ~~ self]) ifTrue: [^target handleEvent: anEvent]].
+	^false! !
+
 !ClassBrowser methodsFor: 'drawing'!
 displayOn: aCanvas
 	aCanvas clipTo: bounds.
