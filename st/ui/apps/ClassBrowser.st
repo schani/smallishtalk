@@ -102,8 +102,13 @@ refreshSelectors
 	selectorObjects do: [:s | names add: s asString].
 	selectorPane items: names!
 selectorSelected: i
+	"kernel methods cross-compiled without source retention answer nil from
+	 sourceCodeAt: — show a note instead of handing the pane nil."
+	| src |
 	currentSelector := selectorObjects at: i.
-	sourcePane contents: (currentClass sourceCodeAt: currentSelector)!
+	src := currentClass sourceCodeAt: currentSelector.
+	src isNil ifTrue: [src := '"no source retained for ' , currentSelector asString , '"'].
+	sourcePane contents: src!
 classDefinitionText
 	| sup |
 	sup := currentClass superclass isNil
@@ -170,9 +175,11 @@ displayOn: aCanvas
 	self drawFramesOn: aCanvas.
 	^self!
 drawFramesOn: aCanvas
+	"only the internal dividers — no outer border: the browser fills the host
+	 window, whose edges already delimit it (and the top edge of a border just
+	 fuses with the title bar)."
 	| colW listBottom |
 	aCanvas clipTo: bounds.
-	aCanvas frameRectangle: bounds value: 1.
 	listBottom := categoryPane bounds bottom.
 	colW := bounds width // 4.
 	aCanvas line: (Point x: bounds left y: listBottom) to: (Point x: bounds right - 1 y: listBottom) value: 1.

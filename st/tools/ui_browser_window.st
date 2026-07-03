@@ -9,6 +9,7 @@ Smalltalk organization classify: (Smalltalk classNamed: 'String') under: 'Collec
 Smalltalk organization classify: (Smalltalk classNamed: 'OrderedCollection') under: 'Collections'.
 Smalltalk organization classify: (Smalltalk classNamed: 'Dictionary') under: 'Collections'.
 d := Display width: 800 height: 520.
+d cursorVisible: false. "the OS draws the cursor over a real window"
 b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 800 y: 520)).
 b selectCategoryNamed: 'Kernel'.
 s := UISupervisor on: d.

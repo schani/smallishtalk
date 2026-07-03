@@ -4,7 +4,7 @@
  Form the host ever presents (primPixelBlit)."
 
 Object subclass: #Display
-	instanceVariableNames: 'form width height tracks cursor cursorX cursorY cursorShown'
+	instanceVariableNames: 'form width height tracks cursor cursorX cursorY cursorShown cursorVisible'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'UI-WindowManager'!
@@ -25,7 +25,8 @@ setWidth: w height: h
 	cursor := self buildCursor.
 	cursorX := 0.
 	cursorY := 0.
-	cursorShown := false!
+	cursorShown := false.
+	cursorVisible := true!
 buildCursor
 	"a tiny 5x5 caret; ink where set."
 	| c |
@@ -60,9 +61,17 @@ addTrackLeft: l width: w
 cursorX: cx y: cy
 	cursorX := cx.
 	cursorY := cy!
+cursorVisible
+	^cursorVisible!
+cursorVisible: aBoolean
+	"windowed runs turn the software cursor off — the OS already draws one
+	 over the window, and it tracks the mouse far better than a repaint can."
+	cursorVisible := aBoolean!
 blitCursorXor
-	"XOR the cursor Form onto the screen; a second call erases it (rule 6)."
+	"XOR the cursor Form onto the screen; a second call erases it (rule 6).
+	 A no-op when the software cursor is off (windowed runs)."
 	| bb |
+	cursorVisible ifFalse: [^self].
 	bb := BitBlt new.
 	bb destForm: form.
 	bb sourceForm: cursor.

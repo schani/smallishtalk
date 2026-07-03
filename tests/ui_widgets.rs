@@ -115,7 +115,7 @@ Transcript showCr: lp selectedItem.
 lp selectPrevious.
 lp selectPrevious.
 Transcript showCr: lp selectedItem.
-Transcript showCr: (lp selectAtPoint: (Point x: 3 y: 10)) printString.
+Transcript showCr: (lp selectAtPoint: (Point x: 3 y: 12)) printString.
 Transcript showCr: lp selectedItem.
 Transcript showCr: log size printString.
 "#;
@@ -178,18 +178,21 @@ fn listpane_selected_row_is_reverse_video() {
     // draw normally. Golden-verified 1-bit render.
     let driver = r#"
 | f lp c |
-f := Form width: 24 height: 27.
-lp := ListPane bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 24 y: 27)).
+f := Form width: 24 height: 29.
+lp := ListPane bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 24 y: 29)).
 lp items: (Array with: 'AB' with: 'CD' with: 'EF').
 lp select: 2.
 c := Canvas on: f.
 lp displayOn: c.
 Transcript show: f asAsciiString.
 "#;
-    // Items 'AB' (rows 0-8, normal) and 'EF' (rows 18-26, normal) draw black-on-
-    // white; the selected 'CD' (rows 9-16) is a black bar with the glyphs XORed
-    // to white — reverse video. Row 17 is the bar's fully-inked base line.
+    // Items 'AB' (rows 2-10, normal) and 'EF' (rows 20-28, normal) draw black-on-
+    // white; the selected 'CD' (rows 11-18) is a black bar with the glyphs XORed
+    // to white — reverse video. Row 18 is the bar's fully-inked base line. The
+    // top two rows are the pane's topInset.
     let expected = "\
+........................
+........................
 ..###....####...........
 .#...#...#...#..........
 .#...#...#...#..........

@@ -130,26 +130,36 @@ Transcript showCr: b doIt printString.
 
 #[test]
 fn browser_renders_a_framed_five_pane_layout() {
-    // Structural render check: the browser paints a full outer frame, a
-    // horizontal rule above the source pane, and 3 vertical column rules.
+    // Structural render check: the browser paints NO outer frame (the host
+    // window's edges delimit it), a horizontal rule above the source pane,
+    // and 3 vertical column rules.
     let driver = r#"
-| b f c top |
+| b f c top bot |
 Smalltalk organization classify: (Smalltalk classNamed: 'Array') under: 'Collections'.
 b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 40 y: 30)).
 b selectCategoryNamed: 'Collections'.
 f := Form width: 40 height: 30.
 c := Canvas on: f.
 b displayOn: c.
-"top border row fully inked"
+"no outer border: row 0 is white except where the 3 column rules start
+ (x = 10, 20, 30), and the bottom row is fully white"
 top := true.
-0 to: 39 do: [:x | (f pixelValueAtX: x y: 0) = 1 ifFalse: [top := false]].
-Transcript showCr: 'topBorder=' , top printString.
+0 to: 39 do: [:x |
+	((x > 0 and: [x \\ 10 = 0]) or: [(f pixelValueAtX: x y: 0) = 0])
+		ifFalse: [top := false]].
+Transcript showCr: 'topClear=' , top printString.
+bot := true.
+0 to: 39 do: [:x | (f pixelValueAtX: x y: 29) = 0 ifFalse: [bot := false]].
+Transcript showCr: 'bottomClear=' , bot printString.
 "the list/source divider is at 2/5 of height = row 12"
 Transcript showCr: 'divider=' , (f pixelValueAtX: 20 y: 12) printString.
 "a column rule exists at x = width//4 = 10 within the list area"
 Transcript showCr: 'col=' , (f pixelValueAtX: 10 y: 5) printString.
 "#;
-    assert_eq!(drive("render", driver), "topBorder=true\ndivider=1\ncol=1\n");
+    assert_eq!(
+        drive("render", driver),
+        "topClear=true\nbottomClear=true\ndivider=1\ncol=1\n"
+    );
 }
 
 #[test]
@@ -222,4 +232,25 @@ Transcript showCr: b protocolNames isEmpty printString.
     let events = [[2i64, 65, 4, 1, 1]]; // mouse button, x=65 y=4, left, down
     let out = drive_with_events("click", driver, &events);
     assert_eq!(out, "false\nString\nfalse\n");
+}
+
+#[test]
+fn browser_shows_placeholder_for_unretained_source() {
+    // Selecting a selector whose method kept no source (kernel methods built
+    // by the no-source materializers answer nil from sourceCodeAt:) must show
+    // a note in the source pane, not crash the pane on nil.
+    let driver = r#"
+| b sel m |
+Smalltalk organization classify: (Smalltalk classNamed: 'Array') under: 'Collections'.
+b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 240 y: 120)).
+b selectCategoryNamed: 'Collections'.
+b selectClassNamed: 'Array'.
+b selectProtocolNamed: (b protocolNames at: 1).
+sel := b selectorNames at: 1.
+m := b currentClass compiledMethodAt: sel asSymbol.
+m instVarAt: 7 put: nil.
+b selectSelectorNamed: sel.
+Transcript showCr: (b sourcePane contents = ('"no source retained for ' , sel , '"')) printString.
+"#;
+    assert_eq!(drive("nosource", driver), "true\n");
 }

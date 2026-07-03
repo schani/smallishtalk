@@ -1116,7 +1116,13 @@ impl Vm {
                 ));
             }
             if !self.service_timers() {
-                std::thread::sleep(std::time::Duration::from_millis(1));
+                // Nothing but a due timer can unblock us (single-threaded VM,
+                // input is polled by Smalltalk code), so sleep straight to the
+                // earliest deadline instead of spinning in 1ms naps.
+                let now = self.start_instant.elapsed().as_millis() as i64;
+                let next = self.timer_requests.iter().map(|(t, _)| *t).min().unwrap();
+                let dur = (next - now).max(1) as u64;
+                std::thread::sleep(std::time::Duration::from_millis(dur));
             }
         }
     }

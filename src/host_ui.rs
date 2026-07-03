@@ -68,6 +68,21 @@ pub struct HostUi {
     /// rather than every frame the button is held.
     #[cfg(feature = "ui")]
     pub last_down: bool,
+    /// Last reported mouse position, so a move event fires only when the
+    /// position actually changes. minifb re-reports the same position on
+    /// every poll; pushing it unconditionally makes the event queue
+    /// self-feeding, and a drain-until-empty pump never terminates.
+    #[cfg(feature = "ui")]
+    pub last_pos: Option<(i64, i64)>,
+    /// Keys reported pressed by the last harvest — same self-feeding hazard
+    /// as `last_pos`: between window updates minifb re-reports the same
+    /// pressed set, so a key-down must fire only when it newly appears.
+    #[cfg(feature = "ui")]
+    pub last_keys: Vec<minifb::Key>,
+    /// The close event has been posted; never post it twice (the closed /
+    /// escape state stays set on every poll until the process exits).
+    #[cfg(feature = "ui")]
+    pub close_sent: bool,
 }
 
 impl Default for HostUi {
@@ -91,6 +106,12 @@ impl Default for HostUi {
             win_h: 0,
             #[cfg(feature = "ui")]
             last_down: false,
+            #[cfg(feature = "ui")]
+            last_pos: None,
+            #[cfg(feature = "ui")]
+            last_keys: Vec::new(),
+            #[cfg(feature = "ui")]
+            close_sent: false,
         }
     }
 }
@@ -254,7 +275,29 @@ impl HostUi {
         }) else {
             return;
         };
+        self.ingest_window_state(open, esc, pos.map(|(x, y)| (x as i64, y as i64)), down, keys);
+    }
+
+    /// Turn one window-state snapshot into queued events. Split from the
+    /// window poll so the edge-detection rules are testable without a real
+    /// window. THE contract: identical consecutive snapshots (which is what
+    /// minifb reports between updates) must eventually enqueue NOTHING —
+    /// primNextEvent harvests on every call, so any state re-reported as an
+    /// event makes the image's drain-until-empty pump spin forever.
+    #[cfg(feature = "ui")]
+    fn ingest_window_state(
+        &mut self,
+        open: bool,
+        esc: bool,
+        pos: Option<(i64, i64)>,
+        down: bool,
+        keys: Vec<minifb::Key>,
+    ) {
         if !open || esc {
+            if self.close_sent {
+                return;
+            }
+            self.close_sent = true;
             if self.verbose {
                 eprintln!(
                     "ui: close event ({})",
@@ -265,16 +308,94 @@ impl HostUi {
             return;
         }
         if let Some((x, y)) = pos {
-            self.events.push_back([EV_MOUSE_MOVE, x as i64, y as i64, 0, 0]);
+            if self.last_pos != Some((x, y)) {
+                self.events.push_back([EV_MOUSE_MOVE, x, y, 0, 0]);
+                self.last_pos = Some((x, y));
+            }
             // Only on a press/release edge, so a held button doesn't re-fire.
             if down != self.last_down {
-                self.events
-                    .push_back([EV_MOUSE_BUTTON, x as i64, y as i64, 1, down as i64]);
+                self.events.push_back([EV_MOUSE_BUTTON, x, y, 1, down as i64]);
                 self.last_down = down;
             }
         }
-        for key in keys {
-            self.events.push_back([EV_KEY_DOWN, key as i64, 0, 0, 0]);
+        for key in &keys {
+            if !self.last_keys.contains(key) {
+                self.events.push_back([EV_KEY_DOWN, *key as i64, 0, 0, 0]);
+            }
+        }
+        self.last_keys = keys;
+    }
+}
+
+#[cfg(all(test, feature = "ui"))]
+mod tests {
+    use super::*;
+    use minifb::Key;
+
+    fn drain(ui: &mut HostUi) -> Vec<HostEvent> {
+        let mut out = Vec::new();
+        while let Some(e) = ui.pop_event() {
+            out.push(e);
+        }
+        out
+    }
+
+    /// The invariant primNextEvent's drain loop depends on: re-reporting an
+    /// unchanged window snapshot (what minifb does between updates) enqueues
+    /// nothing after the first harvest. Each regression here was a live hang.
+    #[test]
+    fn repeated_identical_snapshots_quiesce() {
+        let mut ui = HostUi::new();
+        ui.ingest_window_state(true, false, Some((10, 20)), true, vec![Key::A, Key::B]);
+        let first = drain(&mut ui);
+        assert_eq!(
+            first,
+            vec![
+                [EV_MOUSE_MOVE, 10, 20, 0, 0],
+                [EV_MOUSE_BUTTON, 10, 20, 1, 1],
+                [EV_KEY_DOWN, Key::A as i64, 0, 0, 0],
+                [EV_KEY_DOWN, Key::B as i64, 0, 0, 0],
+            ]
+        );
+        for _ in 0..3 {
+            ui.ingest_window_state(true, false, Some((10, 20)), true, vec![Key::A, Key::B]);
+            assert_eq!(drain(&mut ui), Vec::<HostEvent>::new());
+        }
+    }
+
+    #[test]
+    fn changes_fire_as_edges() {
+        let mut ui = HostUi::new();
+        ui.ingest_window_state(true, false, Some((10, 20)), true, vec![Key::A]);
+        drain(&mut ui);
+        // Move, release, new key; A held over from last time must not re-fire.
+        ui.ingest_window_state(true, false, Some((11, 20)), false, vec![Key::A, Key::C]);
+        assert_eq!(
+            drain(&mut ui),
+            vec![
+                [EV_MOUSE_MOVE, 11, 20, 0, 0],
+                [EV_MOUSE_BUTTON, 11, 20, 1, 0],
+                [EV_KEY_DOWN, Key::C as i64, 0, 0, 0],
+            ]
+        );
+        // A released then re-pressed fires again.
+        ui.ingest_window_state(true, false, Some((11, 20)), false, vec![]);
+        drain(&mut ui);
+        ui.ingest_window_state(true, false, Some((11, 20)), false, vec![Key::A]);
+        assert_eq!(drain(&mut ui), vec![[EV_KEY_DOWN, Key::A as i64, 0, 0, 0]]);
+    }
+
+    #[test]
+    fn close_fires_exactly_once() {
+        for esc in [false, true] {
+            let mut ui = HostUi::new();
+            let open = esc; // closed-window in one case, escape in the other
+            ui.ingest_window_state(open, esc, None, false, Vec::new());
+            assert_eq!(drain(&mut ui), vec![[EV_CLOSE, 0, 0, 0, 0]]);
+            for _ in 0..3 {
+                ui.ingest_window_state(open, esc, None, false, Vec::new());
+                assert_eq!(drain(&mut ui), Vec::<HostEvent>::new());
+            }
         }
     }
 }

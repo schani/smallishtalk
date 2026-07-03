@@ -38,7 +38,12 @@ acceptAction: aBlock
 charWidth
 	^StrikeFont default width!
 lineHeight
-	^StrikeFont default height + 1! !
+	^StrikeFont default height + 1!
+topInset
+	"blank rows between the pane's top edge and the first line of text; without
+	 this the first line's cap height sits flush on the frame line above it
+	 and reads as cut off."
+	^2! !
 
 !TextPane methodsFor: 'selecting'!
 clampOffset: k
@@ -132,7 +137,7 @@ columnOfOffset: k
 	^col!
 pointForOffset: k
 	^Point x: bounds left + 1 + ((self columnOfOffset: k) * self charWidth)
-		y: bounds top + ((self lineOfOffset: k) * self lineHeight)! !
+		y: bounds top + self topInset + ((self lineOfOffset: k) * self lineHeight)! !
 
 !TextPane methodsFor: 'drawing'!
 displayOn: aCanvas
@@ -141,7 +146,7 @@ displayOn: aCanvas
 	font := StrikeFont default.
 	"draw each line of text."
 	lines := self splitLines.
-	y := bounds top.
+	y := bounds top + self topInset.
 	lines do: [:line |
 		aCanvas drawString: line at: (Point x: bounds left + 1 y: y).
 		y := y + self lineHeight].
@@ -197,7 +202,7 @@ placeCaretAt: aPoint
 	"map a click to the nearest offset on its line."
 	| line col off i lineNo |
 	(self containsPoint: aPoint) ifFalse: [^false].
-	line := (aPoint y - bounds top) // self lineHeight.
+	line := ((aPoint y - bounds top - self topInset) max: 0) // self lineHeight.
 	col := (aPoint x - bounds left - 1) // self charWidth.
 	col < 0 ifTrue: [col := 0].
 	"walk to the start of that line, then advance col columns (clamped to EOL)."

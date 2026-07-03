@@ -156,9 +156,11 @@ Transcript showCr: 'running: ' , s running printString.
 
 #[test]
 fn draw_has_a_deterministic_work_budget() {
-    // One runStep drawing two named viewers: exactly 2 glyph blits (the names)
-    // + 1 XOR cursor blit = 3 BitBlt calls, and 1 frame presented. These are
-    // the deterministic WORK metrics CI asserts (timing is only reported).
+    // One runStep drawing two named viewers. Everything blits now: 1 whole-
+    // form clear + per viewer (4 frame edges + 1 separator line + 1 name
+    // glyph) x 2 + 1 XOR cursor = 14 BitBlt calls, and 1 frame presented.
+    // These are the deterministic WORK metrics CI asserts (timing is only
+    // reported).
     let driver = r#"
 | d t s |
 d := Display width: 32 height: 24.
@@ -172,7 +174,7 @@ Transcript showCr: 'blits=' , (s probe counterNamed: 'ui.bitblt_calls') printStr
 Transcript showCr: 'frames=' , (s probe counterNamed: 'ui.frames_presented') printString.
 "#;
     let out = drive("perf", driver);
-    assert_eq!(out, "blits=3\nframes=1\n");
+    assert_eq!(out, "blits=14\nframes=1\n");
 }
 
 #[test]

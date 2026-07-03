@@ -6,7 +6,7 @@
  window-close event."
 
 Object subclass: #UISupervisor
-	instanceVariableNames: 'display running probe rootView'
+	instanceVariableNames: 'display running probe rootView damaged'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'UI-WindowManager'!
@@ -22,6 +22,7 @@ on: aDisplay
 setDisplay: aDisplay
 	display := aDisplay.
 	running := true.
+	damaged := true.
 	probe := FrameProbe new! !
 
 !UISupervisor methodsFor: 'accessing'!
@@ -50,18 +51,30 @@ pumpEvents
 	^n!
 dispatch: anEvent
 	anEvent isClose ifTrue: [running := false. ^self].
-	anEvent isMouseMove ifTrue: [
-		display cursorX: anEvent position x y: anEvent position y].
+	anEvent isMouseMove
+		ifTrue: [
+			display cursorX: anEvent position x y: anEvent position y.
+			"a move only dirties the screen when we draw the cursor ourselves
+			 (headless); windowed, the OS cursor moves without a repaint."
+			display cursorVisible ifTrue: [damaged := true]]
+		ifFalse: [
+			"buttons, keys, scroll, resize can all change what is on screen."
+			damaged := true].
 	"route buttons and keystrokes (and move) to the app view, if any."
 	rootView notNil ifTrue: [rootView handleEvent: anEvent].
 	^self! !
 
 !UISupervisor methodsFor: 'the loop'!
 runStep
-	"one UI iteration, instrumented per phase (UI.md §13)."
+	"one UI iteration, instrumented per phase (UI.md §13). Paint is
+	 damage-driven: repainting the whole screen in interpreted Smalltalk every
+	 tick pegs a core, so an undamaged tick skips it. The flush is NOT skipped:
+	 windowed, presenting is also what pumps the OS event loop (minifb only
+	 refreshes its input snapshot inside update), so a static screen must keep
+	 presenting to keep receiving input."
 	probe startFrame.
 	probe phase: #events do: [self pumpEvents].
-	probe phase: #paint do: [self paint].
+	probe phase: #paint do: [damaged ifTrue: [self paint. damaged := false]].
 	probe phase: #present do: [display flush].
 	probe endFrame.
 	^self!

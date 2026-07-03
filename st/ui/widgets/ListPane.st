@@ -31,8 +31,13 @@ onSelect: aBlock
 	onSelect := aBlock!
 lineHeight
 	^StrikeFont default height + 1!
+topInset
+	"blank rows between the pane's top edge and the first row of text; without
+	 this the first line's cap height sits flush on the frame line above it
+	 and reads as cut off."
+	^2!
 visibleRows
-	^bounds height // self lineHeight! !
+	^(bounds height - self topInset) // self lineHeight! !
 
 !ListPane methodsFor: 'selecting'!
 select: anIndex
@@ -50,7 +55,7 @@ selectAtPoint: aPoint
 	"select the row under aPoint; answer true if it hit an item."
 	| row |
 	(self containsPoint: aPoint) ifFalse: [^false].
-	row := topIndex + ((aPoint y - bounds top) // self lineHeight).
+	row := topIndex + (((aPoint y - bounds top - self topInset) max: 0) // self lineHeight).
 	(row >= 1 and: [row <= items size]) ifTrue: [self select: row. ^true].
 	^false!
 scrollToSelection
@@ -65,7 +70,7 @@ displayOn: aCanvas
 	aCanvas clipTo: bounds.
 	font := StrikeFont default.
 	fh := font height.
-	y := bounds top.
+	y := bounds top + self topInset.
 	i := topIndex.
 	[i <= items size and: [y + fh <= bounds bottom]] whileTrue: [
 		i = selection

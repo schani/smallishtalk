@@ -64,9 +64,28 @@ pixelAtX: px y: py put: v
 
 !Form methodsFor: 'drawing'!
 fill: aValue
-	| b |
-	b := aValue = 0 ifTrue: [0] ifFalse: [255].
-	1 to: bits size do: [:i | bits at: i put: b].
+	"value 0 clears through the BitBlt primitive (a whole-screen clear runs on
+	 every repaint); nonzero keeps the byte loop — it is rare, and it is what
+	 builds the solid source form the value-1 blits read from."
+	| bb |
+	aValue = 0 ifTrue: [
+		bb := BitBlt new.
+		bb destForm: self.
+		bb sourceForm: nil.
+		bb combinationRule: 0.
+		bb destX: 0.
+		bb destY: 0.
+		bb width: width.
+		bb height: height.
+		bb sourceX: 0.
+		bb sourceY: 0.
+		bb clipX: 0.
+		bb clipY: 0.
+		bb clipWidth: width.
+		bb clipHeight: height.
+		bb copyBits.
+		^self].
+	1 to: bits size do: [:i | bits at: i put: 255].
 	^self!
 copyFrom: srcRect in: srcForm to: dstPoint rule: r
 	"convenience: build a BitBlt of the whole srcRect and run it."
