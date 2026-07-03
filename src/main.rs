@@ -8,6 +8,7 @@ fn usage() -> ! {
          \n\
          UI options (UI.md §4A):\n\
          \x20 --ui              open a real window (requires the `ui` build feature)\n\
+         \x20 --verbose, -v     print UI host diagnostics (window creation, present, events)\n\
          \x20 --virtual-clock   use the deterministic virtual clock (reproducible runs)\n\
          \x20 --ui-stats        print the VM counter table (incl. UI work metrics) on exit\n\
          \n\
@@ -22,10 +23,12 @@ fn main() {
     let mut windowed = false;
     let mut virtual_clock = false;
     let mut ui_stats = false;
+    let mut verbose = false;
 
     for arg in std::env::args().skip(1) {
         match arg.as_str() {
             "--ui" => windowed = true,
+            "--verbose" | "-v" => verbose = true,
             "--virtual-clock" => virtual_clock = true,
             "--ui-stats" => ui_stats = true,
             "-h" | "--help" => usage(),
@@ -52,6 +55,7 @@ fn main() {
         }
     };
 
+    vm.host.verbose = verbose;
     if virtual_clock {
         vm.host.use_virtual_clock();
     }
@@ -59,9 +63,19 @@ fn main() {
         #[cfg(feature = "ui")]
         {
             vm.host.windowed = true;
+            if verbose {
+                eprintln!("ui: --ui set; `ui` feature IS compiled in; windowed present enabled");
+            }
         }
         #[cfg(not(feature = "ui"))]
-        eprintln!("note: --ui ignored — rebuild with `--features ui` for a window");
+        eprintln!(
+            "ui: --ui was given, but this binary was built WITHOUT the `ui` feature, \
+             so NO window can open.\n    Rebuild with: cargo build --release --features ui \
+             (or use `make ui-window`)."
+        );
+    }
+    if verbose {
+        eprintln!("ui: running image {path} (press the close box or Escape to quit)");
     }
 
     // SMALLISHTALK_STATS=1 dumps the counter table on exit (via Drop);

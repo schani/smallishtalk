@@ -49,7 +49,8 @@ gst -Q "${COMPILER[@]}" st/tools/build_ui_image.st -a "$DRIVER" "$IMG"
 
 echo "== running =="
 if [ "$MODE" = window ]; then
-	exec ./target/release/smallishtalk --ui "$IMG"
+	# --verbose prints window-creation / present / close diagnostics to stderr.
+	exec ./target/release/smallishtalk --ui --verbose "$IMG"
 else
 	./target/release/smallishtalk "$IMG"
 	echo

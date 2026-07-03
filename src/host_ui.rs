@@ -45,6 +45,12 @@ pub struct HostUi {
     /// Pending host events, oldest first (UI.md §3.2/§4.2).
     pub events: VecDeque<HostEvent>,
     pub clock: TimeSource,
+    /// Print UI host diagnostics to stderr (window creation, present, events).
+    /// Set from `--verbose`; always compiled so both builds can toggle it.
+    pub verbose: bool,
+    /// Count of present calls, for a throttled verbose heartbeat.
+    #[cfg(feature = "ui")]
+    pub present_count: u64,
     #[cfg(feature = "ui")]
     pub window: Option<minifb::Window>,
     /// Windowed builds open a real window on first present; headless never does.
@@ -72,6 +78,9 @@ impl Default for HostUi {
             buf_height: 0,
             events: VecDeque::new(),
             clock: TimeSource::Real,
+            verbose: false,
+            #[cfg(feature = "ui")]
+            present_count: 0,
             #[cfg(feature = "ui")]
             window: None,
             #[cfg(feature = "ui")]
@@ -187,12 +196,45 @@ impl HostUi {
         let recreate =
             self.window.is_none() || self.win_w != self.buf_width || self.win_h != self.buf_height;
         if recreate {
-            self.window = Window::new("smallishtalk", w, h, WindowOptions::default()).ok();
-            self.win_w = self.buf_width;
-            self.win_h = self.buf_height;
+            if self.verbose {
+                eprintln!("ui: creating {w}x{h} minifb window...");
+            }
+            match Window::new("smallishtalk", w, h, WindowOptions::default()) {
+                Ok(win) => {
+                    if self.verbose {
+                        eprintln!("ui: window created ({w}x{h})");
+                    }
+                    self.window = Some(win);
+                    self.win_w = self.buf_width;
+                    self.win_h = self.buf_height;
+                }
+                Err(e) => {
+                    // Never silently swallow this — a failed window is exactly
+                    // the "no window appears" symptom. Fail fast instead of
+                    // retrying (and re-printing) every frame: stop windowed
+                    // present and post a close event so the UI loop unwinds.
+                    eprintln!("ui: ERROR: could not create window: {e}");
+                    eprintln!(
+                        "ui: no window available — exiting the UI loop. Ensure you are in a \
+                         graphical session (a real macOS login, or a Linux display server); \
+                         this will not work over plain SSH."
+                    );
+                    self.window = None;
+                    self.windowed = false;
+                    self.events.push_back([EV_CLOSE, 0, 0, 0, 0]);
+                    return;
+                }
+            }
         }
         if let Some(win) = &mut self.window {
-            let _ = win.update_with_buffer(&self.buffer, w, h);
+            if let Err(e) = win.update_with_buffer(&self.buffer, w, h) {
+                eprintln!("ui: ERROR: update_with_buffer failed: {e}");
+            }
+        }
+        self.present_count += 1;
+        // A heartbeat so `--verbose` shows the loop is actually presenting.
+        if self.verbose && (self.present_count == 1 || self.present_count % 120 == 0) {
+            eprintln!("ui: presented {} frame(s)", self.present_count);
         }
     }
 
@@ -213,6 +255,12 @@ impl HostUi {
             return;
         };
         if !open || esc {
+            if self.verbose {
+                eprintln!(
+                    "ui: close event ({})",
+                    if !open { "window closed" } else { "escape" }
+                );
+            }
             self.events.push_back([EV_CLOSE, 0, 0, 0, 0]);
             return;
         }
