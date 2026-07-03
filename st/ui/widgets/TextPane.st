@@ -35,8 +35,6 @@ selectedText
 	^contents copyFrom: selStart + 1 to: selStop!
 acceptAction: aBlock
 	acceptAction := aBlock!
-charWidth
-	^StrikeFont default width!
 lineHeight
 	^StrikeFont default height + 1!
 topInset
@@ -126,17 +124,22 @@ lineOfOffset: k
 		(contents at: i) = 10 ifTrue: [line := line + 1].
 		i := i + 1].
 	^line!
-columnOfOffset: k
-	"answer the 0-based column of offset k on its line."
-	| col i |
-	col := 0.
+lineStartOfOffset: k
+	"answer the offset of the start of the line containing offset k."
+	| start i |
+	start := 0.
 	i := 1.
 	[i <= k] whileTrue: [
-		(contents at: i) = 10 ifTrue: [col := 0] ifFalse: [col := col + 1].
+		(contents at: i) = 10 ifTrue: [start := i].
 		i := i + 1].
-	^col!
+	^start!
 pointForOffset: k
-	^Point x: bounds left + 1 + ((self columnOfOffset: k) * self charWidth)
+	"pixel position of the caret at offset k: measure the line's prefix
+	 through the (proportional) font instead of multiplying a column count."
+	| start |
+	start := self lineStartOfOffset: k.
+	^Point x: bounds left + 1
+			+ (StrikeFont default widthOfString: (contents copyFrom: start + 1 to: k))
 		y: bounds top + self topInset + ((self lineOfOffset: k) * self lineHeight)! !
 
 !TextPane methodsFor: 'drawing'!
@@ -173,15 +176,16 @@ drawCaretOn: aCanvas
 	fh := StrikeFont default height.
 	aCanvas line: p to: (Point x: p x y: p y + fh - 1) value: 1!
 drawSelectionOn: aCanvas
-	"reverse-video each selected character cell (skip newlines)."
+	"reverse-video each selected character cell (skip newlines); cells are as
+	 wide as their character's advance."
 	| font cw fh k p |
 	font := StrikeFont default.
-	cw := self charWidth.
 	fh := font height.
 	k := selStart.
 	[k < selStop] whileTrue: [
 		(contents at: k + 1) = 10 ifFalse: [
 			p := self pointForOffset: k.
+			cw := font widthOfCharacter: (contents at: k + 1).
 			aCanvas fillRectangle: (Rectangle origin: p corner: (Point x: p x + cw y: p y + fh)) value: 1.
 			font displayString: (contents copyFrom: k + 1 to: k + 1) on: aCanvas form at: p rule: 6].
 		k := k + 1].
@@ -199,13 +203,13 @@ handleKey: anEvent
 	(code >= 32 or: [code = 10]) ifTrue: [self insertCharacter: code. ^true].
 	^false!
 placeCaretAt: aPoint
-	"map a click to the nearest offset on its line."
-	| line col off i lineNo |
+	"map a click to the nearest offset on its line: walk the line's characters
+	 accumulating (proportional) advances until the click falls before a
+	 character's midpoint."
+	| line off i lineNo font x cw |
 	(self containsPoint: aPoint) ifFalse: [^false].
 	line := ((aPoint y - bounds top - self topInset) max: 0) // self lineHeight.
-	col := (aPoint x - bounds left - 1) // self charWidth.
-	col < 0 ifTrue: [col := 0].
-	"walk to the start of that line, then advance col columns (clamped to EOL)."
+	"walk to the start of that line"
 	off := 0.
 	lineNo := 0.
 	i := 1.
@@ -213,8 +217,12 @@ placeCaretAt: aPoint
 		(contents at: i) = 10 ifTrue: [lineNo := lineNo + 1].
 		i := i + 1].
 	off := i - 1.
-	[col > 0 and: [off < contents size and: [(contents at: off + 1) ~= 10]]] whileTrue: [
-		off := off + 1.
-		col := col - 1].
+	font := StrikeFont default.
+	x := bounds left + 1.
+	[off < contents size and: [(contents at: off + 1) ~= 10]] whileTrue: [
+		cw := font widthOfCharacter: (contents at: off + 1).
+		aPoint x < (x + (cw // 2)) ifTrue: [self caretAt: off. ^true].
+		x := x + cw.
+		off := off + 1].
 	self caretAt: off.
 	^true! !

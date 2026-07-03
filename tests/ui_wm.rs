@@ -71,6 +71,7 @@ fn drive_with_events(name: &str, driver_src: &str, events: &[[i64; 5]]) -> Strin
 fn two_viewers_tile_to_fill_the_track() {
     let driver = r#"
 | d t |
+StrikeFont useClassic.
 d := Display width: 16 height: 24.
 t := d addTrackLeft: 0 width: 16.
 t open: (Viewer named: 'A').
@@ -115,6 +116,7 @@ Transcript show: d asAsciiString.
 fn resize_moves_the_split_between_viewers() {
     let driver = r#"
 | d t a b |
+StrikeFont useClassic.
 d := Display width: 16 height: 24.
 t := d addTrackLeft: 0 width: 16.
 a := Viewer named: 'A'.
@@ -163,6 +165,7 @@ fn draw_has_a_deterministic_work_budget() {
     // reported).
     let driver = r#"
 | d t s |
+StrikeFont useClassic.
 d := Display width: 32 height: 24.
 t := d addTrackLeft: 0 width: 32.
 t open: (Viewer named: 'A').

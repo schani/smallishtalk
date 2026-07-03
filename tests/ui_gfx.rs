@@ -128,6 +128,7 @@ fn text_pen_and_canvas_render() {
     // a Bresenham diagonal, and a Canvas rectangle frame.
     let driver = r#"
 | f pen c |
+StrikeFont useClassic.
 f := Form width: 16 height: 8.
 StrikeFont default displayString: 'AB' on: f at: (Point x: 0 y: 0).
 Transcript show: f asAsciiString.

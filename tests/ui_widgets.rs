@@ -104,6 +104,7 @@ Transcript showCr: tp selectionStart printString , '-' , tp selectionStop printS
 fn listpane_selection_navigation_and_click() {
     let driver = r#"
 | lp log |
+StrikeFont useClassic.
 lp := ListPane bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 60 y: 40)).
 log := OrderedCollection new.
 lp items: (Array with: 'Object' with: 'Array' with: 'String').
@@ -147,6 +148,7 @@ Transcript showCr: b bounds printString.
 fn menupane_resolves_command_at_point() {
     let driver = r#"
 | m |
+StrikeFont useClassic.
 m := MenuPane bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 40 y: 30)).
 m commands: (Array with: #Accept with: #Cancel with: #Format).
 Transcript showCr: (m commandAtPoint: (Point x: 5 y: 2)) printString.
@@ -178,6 +180,7 @@ fn listpane_selected_row_is_reverse_video() {
     // draw normally. Golden-verified 1-bit render.
     let driver = r#"
 | f lp c |
+StrikeFont useClassic.
 f := Form width: 24 height: 29.
 lp := ListPane bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 24 y: 29)).
 lp items: (Array with: 'AB' with: 'CD' with: 'EF').
