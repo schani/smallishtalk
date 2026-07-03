@@ -5,6 +5,54 @@ only, no JIT**) *and* the Smalltalk-side compiler with its GNU Smalltalk
 bootstrap, through the spec's Phase 5 — the compiler self-hosts on the VM
 and its output is bit-identical to the GST cross-compile.
 
+## Usage
+
+**Prerequisites**: a Rust toolchain (edition 2024) and GNU Smalltalk 3.2.5
+(`gst`) — `gst` bootstraps images from the portable Smalltalk sources.
+
+**Build and test**
+
+```sh
+cargo build --release          # the `smallishtalk` VM binary
+cargo test                     # the full Rust suite (VM, GC, corpus, self-host)
+./run-st-tests.sh              # the compiler's GNU Smalltalk SUnit suites
+```
+
+**Run an image** — the VM loads a STIM image and runs its active process:
+
+```sh
+cargo run --release --bin smallishtalk -- <image.im>
+```
+
+`SMALLISHTALK_STATS=1` dumps the VM counter table on exit;
+`SMALLISHTALK_GATE=1` additionally enables the gated hot-path counters.
+
+**Build an image** — images are cross-compiled from Smalltalk by the in-repo
+compiler running under `gst`. The compiler sources must be filed in the order
+below (a builder script then writes the image). For a corpus program:
+
+```sh
+gst -Q \
+  st/compiler/Compat.st st/compiler/Treaty.st st/compiler/Platform.st \
+  st/compiler/AST.st st/compiler/Lexer.st st/compiler/Parser.st \
+  st/compiler/ChunkReader.st st/compiler/CodeGen.st st/compiler/Encoder.st \
+  st/compiler/ImageWriter.st st/compiler/Compiler.st \
+  st/tools/build_corpus_image.st -a st/kernel/kernel.st corpus/<program>.st /tmp/out.im
+cargo run --release --bin smallishtalk -- /tmp/out.im
+```
+
+`cargo test --test corpus_test` automates exactly this for every `corpus/*.st`
+(diffing stdout against the checked-in `corpus/*.expected`).
+
+**Regenerate the Treaty mirror** after editing `treaty.json`:
+
+```sh
+cargo run --bin gen_treaty_st       # rewrites st/compiler/Treaty.st
+```
+
+**Benchmarks**: `make bench` (median-of-5 with a GST-ratio column; history in
+`bench/history.csv`). Profile from inside any image with `Profiler spy: [...]`.
+
 ## The two codebases
 
 **The VM (Rust, `src/`)** and **the compiler (portable Smalltalk, `st/`)**
