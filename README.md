@@ -53,6 +53,64 @@ cargo run --bin gen_treaty_st       # rewrites st/compiler/Treaty.st
 **Benchmarks**: `make bench` (median-of-5 with a GST-ratio column; history in
 `bench/history.csv`). Profile from inside any image with `Profiler spy: [...]`.
 
+### Running the UI (this branch)
+
+This branch adds a bitmap display, an Oberon-style tiling window manager, a
+small widget toolkit and a live **Class Browser** (see [UI.md](UI.md)). It is
+**headless-first** — the whole UI runs, is driven, and is screenshot-tested with
+no window, so it works in CI and can be operated by a person or an agent.
+
+![The live Class Browser, rendered headlessly by the VM](docs/class-browser-demo.png)
+
+*The five-pane Class Browser rendered by the VM from a running image: category /
+class / protocol / selector lists over the retained live source of
+`OrderedCollection>>add:`. Text is the baked-in proportional strike font
+(Adobe Helvetica 12, from the X11 75dpi BDF collection).*
+
+**Quick start** — one command from a fresh checkout builds the VM,
+cross-compiles a UI image and runs it:
+
+```sh
+make ui            # headless: renders the Class Browser to ./ui-screenshot.png
+make ui-window     # a live, click-navigable window (needs the `ui` feature + a display)
+```
+
+(`make ui` needs a Rust toolchain and `gst`; it opens no window, so it works
+over SSH and in CI. `scripts/run-ui.sh [--window]` is the underlying script.)
+
+Under the hood, a UI image bundles the kernel, the compiler (for live compilation) and the UI
+layers, plus a driver program of ordinary Smalltalk. Build one and run it:
+
+```sh
+gst -Q \
+  st/compiler/Compat.st st/compiler/Treaty.st st/compiler/Platform.st \
+  st/compiler/AST.st st/compiler/Lexer.st st/compiler/Parser.st \
+  st/compiler/ChunkReader.st st/compiler/CodeGen.st st/compiler/Encoder.st \
+  st/compiler/ImageWriter.st st/compiler/Compiler.st \
+  st/tools/build_ui_image.st -a <driver.st> /tmp/ui.im
+cargo run --release --bin smallishtalk -- /tmp/ui.im
+```
+
+An example driver — open a Class Browser, navigate it, and save a PNG
+screenshot (the exact loop the demo image uses):
+
+```smalltalk
+| b f |
+b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 480 y: 300)).
+b selectCategoryNamed: 'Kernel'.
+b selectClassNamed: 'OrderedCollection'.
+f := Form width: 480 height: 300.
+b displayOn: (Canvas on: f).
+f saveTo: '/tmp/browser.png'.
+```
+
+Editing a method's source in the browser and calling `accept` recompiles and
+installs it **live**; `Smalltalk evaluate: '3 + 4'` is a do-it.
+
+- Regenerate the baked-in font: `python3 st/tools/gen_font_bdf.py st/ui/gfx/helvR12.bdf > st/ui/gfx/DefaultFont.st`.
+- Optional real window (first external dep, `minifb`): `cargo run --features ui -- --ui /tmp/ui.im`.
+- Headless UI tests: `cargo test --test ui_headless --test ui_gfx --test ui_wm --test ui_widgets --test ui_reflection --test ui_browser`.
+
 ## The two codebases
 
 **The VM (Rust, `src/`)** and **the compiler (portable Smalltalk, `st/`)**

@@ -164,13 +164,13 @@ Object subclass: #BlockClosure
 	category: 'Kernel'!
 
 Object subclass: #CompiledMethod
-	instanceVariableNames: ''
+	instanceVariableNames: 'header bytecodes literals sendSites selector methodClass sourceInfo'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'Kernel'!
 
 Object subclass: #CompiledBlock
-	instanceVariableNames: ''
+	instanceVariableNames: 'header bytecodes literals sendSites outerMethod blockInfo'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'Kernel'!

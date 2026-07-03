@@ -270,12 +270,20 @@ impl Vm {
                 self.heap.write_bytes(obj.as_ptr(), &buf[..n]);
                 Ok(PrimOutcome::Value(obj))
             }
-            // primNextEvent: the v1 host has no event sources; the queue is
-            // always empty (§16 — the UI builds on this later).
-            PRIM_NEXT_EVENT => Ok(PrimOutcome::Value(self.nil())),
+            // primNextEvent (UI.md §4.2): harvest from the host, then pop the
+            // oldest event; empty → nil (preserves the pre-UI stub contract).
+            PRIM_NEXT_EVENT => self.prim_next_event(regs),
+            // The clocks route through the host TimeSource so headless runs are
+            // deterministic under the virtual clock (UI.md §4A.1).
             PRIM_CLOCK_MONOTONIC_MS => Ok(PrimOutcome::Value(Value::from_int(
-                self.start_instant.elapsed().as_millis() as i64,
+                (self.host.mono_ns(self.start_instant) / 1_000_000) as i64,
             ))),
+            PRIM_CLOCK_MONOTONIC_NS => Ok(PrimOutcome::Value(Value::from_int(
+                self.host.mono_ns(self.start_instant) as i64,
+            ))),
+            PRIM_PIXEL_BLIT => self.prim_pixel_blit(regs, r),
+            PRIM_BITBLT => self.prim_bitblt(regs, r),
+            PRIM_SAVE_FORM => self.prim_save_form(regs, r),
             PRIM_CLOCK_WALL_MS => {
                 let ms = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -620,6 +628,209 @@ impl Vm {
         ))
     }
 
+    // --- UI host seam (UI.md §4) ---
+
+    /// Read a 1-bit Form's fields as `(width, height, depth, bits_ptr)`. A Form
+    /// is any fixed object shaped `[width height depth bits]` with a ByteArray
+    /// in slot 3 (UI.md §5.2); the Rust side reads slots by index and needs no
+    /// Form class to exist.
+    fn form_fields(&self, v: Value) -> Option<(i64, i64, i64, usize)> {
+        if !v.is_ptr() || self.heap.num_slots(v.as_ptr()) < 4 {
+            return None;
+        }
+        let p = v.as_ptr();
+        let (w, h, d, bits) = (
+            self.heap.slot(p, 0),
+            self.heap.slot(p, 1),
+            self.heap.slot(p, 2),
+            self.heap.slot(p, 3),
+        );
+        if !w.is_int() || !h.is_int() || !d.is_int() || !bits.is_ptr() {
+            return None;
+        }
+        if !self.heap.header(bits.as_ptr()).is_bytes() {
+            return None;
+        }
+        Some((w.as_int(), h.as_int(), d.as_int(), bits.as_ptr()))
+    }
+
+    /// A 1-bit Form whose `bits` ByteArray is large enough for `height` rows of
+    /// `ceil(width/8)` bytes. Returns `(width, height, bits_ptr)` or a failure
+    /// code — undersized/wrong-depth forms are rejected, never padded.
+    fn present_form(&self, v: Value) -> Result<(u32, u32, usize), i64> {
+        let (w, h, depth, bits) = self.form_fields(v).ok_or(FAIL_WRONG_TYPE)?;
+        if w <= 0 || h <= 0 || depth != 1 {
+            return Err(FAIL_BAD_INDEX);
+        }
+        let stride = (w as usize).div_ceil(8);
+        if self.heap.bytes(bits).len() < (h as usize) * stride {
+            return Err(FAIL_BAD_INDEX);
+        }
+        Ok((w as u32, h as u32, bits))
+    }
+
+    /// primNextEvent (330): harvest host input, then return the oldest event as
+    /// `#(type a b c d)` SmallIntegers, or nil when the queue is empty.
+    fn prim_next_event(&mut self, regs: &mut Regs) -> Result<PrimOutcome, VmError> {
+        // Harvest first so a static, undamaged screen still sees input,
+        // including the close box (UI.md §3.2).
+        self.host.harvest();
+        let Some(ev) = self.host.pop_event() else {
+            return Ok(PrimOutcome::Value(self.nil()));
+        };
+        self.counters.events_processed += 1;
+        let arr = self.alloc_gc(regs, CLASS_ARRAY, FMT_PTRS, 5)?;
+        for (i, &e) in ev.iter().enumerate() {
+            // Every field is a SmallInteger (immediate) — no write barrier.
+            self.heap.set_slot_raw(arr.as_ptr(), i, Value::from_int(e));
+        }
+        Ok(PrimOutcome::Value(arr))
+    }
+
+    /// primPixelBlit (331): present a 1-bit Display Form into the host's ARGB
+    /// buffer (and, windowed, the window). Input harvesting is *not* tied to
+    /// this — see `prim_next_event` (UI.md §4.1).
+    fn prim_pixel_blit(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+        let form = self.get(regs, r);
+        let (w, h, bits_ptr) = match self.present_form(form) {
+            Ok(f) => f,
+            Err(code) => return Ok(PrimOutcome::Fail(code)),
+        };
+        let bits = self.heap.bytes(bits_ptr).to_vec();
+        self.host.present_mono(w, h, &bits);
+        self.counters.frames_presented += 1;
+        Ok(PrimOutcome::Value(form))
+    }
+
+    /// primSaveForm:toFile: (333): write an explicit Form (arg 1) to a PNG file
+    /// named by arg 2. An explicit Form, not an implicit Display, avoids
+    /// stale/ambiguous screenshots (UI.md §4.4).
+    fn prim_save_form(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+        let form = self.get(regs, r + 1);
+        let (w, h, bits_ptr) = match self.present_form(form) {
+            Ok(f) => f,
+            Err(code) => return Ok(PrimOutcome::Fail(code)),
+        };
+        let Some(path) = self.path_arg(regs, r + 2) else {
+            return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+        };
+        let bits = self.heap.bytes(bits_ptr).to_vec();
+        let rgb = crate::host_ui::HostUi::mono_to_rgb(w, h, &bits);
+        let png = crate::png::encode_rgb(w, h, &rgb);
+        match std::fs::write(&path, &png) {
+            Ok(()) => Ok(PrimOutcome::Value(self.nil())),
+            Err(_) => Ok(PrimOutcome::Fail(FAIL_NOT_FOUND)),
+        }
+    }
+
+    /// primBitBlt (332): copy a rectangle of bits from a source Form to a dest
+    /// Form under a combination rule, with clipping (UI.md §4.3). The receiver
+    /// is a BitBlt setup object whose 14 slots are read by index. Source bits
+    /// are copied out first, so dest==source and overlaps are read-before-write.
+    fn prim_bitblt(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+        let setup = self.get(regs, r);
+        if !setup.is_ptr() || self.heap.num_slots(setup.as_ptr()) < 14 {
+            return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+        }
+        let p = setup.as_ptr();
+        let dest = self.heap.slot(p, 0);
+        let source = self.heap.slot(p, 1);
+        // Fields 3..=13 (rule, destX/Y, w, h, srcX/Y, clipX/Y/W/H) are ints.
+        let mut f = [0i64; 11];
+        for (k, idx) in (3..14).enumerate() {
+            let v = self.heap.slot(p, idx);
+            if !v.is_int() {
+                return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+            }
+            f[k] = v.as_int();
+        }
+        let [rule, dx, dy, w, h, sx, sy, clipx, clipy, clipw, cliph] = f;
+        if !matches!(rule, 0 | 3 | 6 | 7) {
+            return Ok(PrimOutcome::Fail(FAIL_UNSUPPORTED_CONTEXT));
+        }
+
+        let Some((dw, dh, dd, dbits)) = self.form_fields(dest) else {
+            return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+        };
+        if dd != 1 {
+            return Ok(PrimOutcome::Fail(FAIL_BAD_INDEX));
+        }
+        let dstride = (dw as usize).div_ceil(8);
+        // Source may be nil (no source — e.g. clear, or a no-op OR/XOR); any
+        // other non-Form or non-1-bit value is a clean type error, never
+        // silently treated as an empty source.
+        let src = if source == self.nil() {
+            None
+        } else {
+            match self.form_fields(source) {
+                Some(f) if f.2 == 1 => Some(f),
+                Some(_) => return Ok(PrimOutcome::Fail(FAIL_BAD_INDEX)),
+                None => return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE)),
+            }
+        };
+        let src_data: Option<Vec<u8>> = src.map(|(_, _, _, sp)| self.heap.bytes(sp).to_vec());
+        let mut dst_data = self.heap.bytes(dbits).to_vec();
+        if dst_data.len() < (dh as usize) * dstride {
+            return Ok(PrimOutcome::Fail(FAIL_BAD_INDEX));
+        }
+        let (sw, sh) = src.map(|(w, h, _, _)| (w, h)).unwrap_or((0, 0));
+        let sstride = (sw as usize).div_ceil(8);
+        if let Some(ref sd) = src_data {
+            if sd.len() < (sh as usize) * sstride {
+                return Ok(PrimOutcome::Fail(FAIL_BAD_INDEX));
+            }
+        }
+
+        // Effective clip: requested clip ∩ dest bounds.
+        let cx0 = clipx.max(0);
+        let cy0 = clipy.max(0);
+        let cx1 = (clipx + clipw).min(dw);
+        let cy1 = (clipy + cliph).min(dh);
+        let mut pixels = 0u64;
+        for j in 0..h {
+            let py = dy + j;
+            if py < cy0 || py >= cy1 {
+                continue;
+            }
+            for i in 0..w {
+                let px = dx + i;
+                if px < cx0 || px >= cx1 {
+                    continue;
+                }
+                let sbit = if let Some(ref sd) = src_data {
+                    let (sxx, syy) = (sx + i, sy + j);
+                    if sxx >= 0 && syy >= 0 && sxx < sw && syy < sh {
+                        let byte = sd[(syy as usize) * sstride + (sxx as usize >> 3)];
+                        (byte >> (7 - (sxx as usize & 7))) & 1
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+                let didx = (py as usize) * dstride + (px as usize >> 3);
+                let dshift = 7 - (px as usize & 7);
+                let dbit = (dst_data[didx] >> dshift) & 1;
+                let out = match rule {
+                    0 => 0,
+                    3 => sbit,
+                    6 => sbit ^ dbit,
+                    _ => sbit | dbit, // rule 7
+                };
+                if out == 1 {
+                    dst_data[didx] |= 1 << dshift;
+                } else {
+                    dst_data[didx] &= !(1 << dshift);
+                }
+                pixels += 1;
+            }
+        }
+        self.heap.write_bytes(dbits, &dst_data);
+        self.counters.bitblt_calls += 1;
+        self.counters.pixels_blitted += pixels;
+        Ok(PrimOutcome::Value(setup))
+    }
+
     // --- Files and stdio ---
 
     fn path_arg(&self, regs: &Regs, k: u8) -> Option<String> {
@@ -905,7 +1116,13 @@ impl Vm {
                 ));
             }
             if !self.service_timers() {
-                std::thread::sleep(std::time::Duration::from_millis(1));
+                // Nothing but a due timer can unblock us (single-threaded VM,
+                // input is polled by Smalltalk code), so sleep straight to the
+                // earliest deadline instead of spinning in 1ms naps.
+                let now = self.start_instant.elapsed().as_millis() as i64;
+                let next = self.timer_requests.iter().map(|(t, _)| *t).min().unwrap();
+                let dur = (next - now).max(1) as u64;
+                std::thread::sleep(std::time::Duration::from_millis(dur));
             }
         }
     }

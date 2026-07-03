@@ -321,7 +321,7 @@ addMethodSource: source toClass: aName classSide: isMeta
 	d isNil ifTrue: [self error: 'unknown class ' , aName].
 	spec := StCodeGen compileMethodSource: source
 		inClass: (self classScopeFor: aName classSide: isMeta).
-	obj := self materializeMethod: spec forClassDesc: d classSide: isMeta.
+	obj := self materializeMethod: spec forClassDesc: d classSide: isMeta source: source.
 	isMeta
 		ifTrue: [
 			d classMethodSelectors add: spec selector.
@@ -333,9 +333,12 @@ addMethodSource: source toClass: aName classSide: isMeta
 
 !StImageWriter methodsFor: 'materializing'!
 materializeMethod: spec forClassDesc: d
-	^self materializeMethod: spec forClassDesc: d classSide: false!
+	^self materializeMethod: spec forClassDesc: d classSide: false source: nil!
 
 materializeMethod: spec forClassDesc: d classSide: isMeta
+	^self materializeMethod: spec forClassDesc: d classSide: isMeta source: nil!
+
+materializeMethod: spec forClassDesc: d classSide: isMeta source: src
 	| m header |
 	m := self addObj: (StObj fixed: Treaty classCompiledmethod slots: Treaty methodNumSlots).
 	header := self packHeaderFor: spec.
@@ -349,7 +352,8 @@ materializeMethod: spec forClassDesc: d classSide: isMeta
 		put: (d isNil
 			ifTrue: [nilObj]
 			ifFalse: [isMeta ifTrue: [d metaObj] ifFalse: [d classObj]]).
-	m at: Treaty methodSourceInfo + 1 put: nilObj.
+	m at: Treaty methodSourceInfo + 1
+		put: (src isNil ifTrue: [nilObj] ifFalse: [self stringFor: src]).
 	^m!
 
 materializeBlock: spec outer: outerObj classDesc: d classSide: isMeta
@@ -534,6 +538,9 @@ buildSpecialsWithStartUp: startUpObj
 	classes do: [:d |
 		classList at: d classIndex + 1 put: d classObj.
 		classList at: d metaIndex + 1 put: d metaObj].
+	"UI.md §9.2: expose the class list to image code as a global, so the
+	 reflection API (Smalltalk allClasses) can enumerate without a primitive."
+	(self globalAssocFor: 'SystemClassList') at: 2 put: classList.
 
 	sels := OrderedCollection new.
 	sels add: '+'; add: '-'; add: '*'; add: '//'; add: '\\'.

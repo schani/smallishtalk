@@ -190,6 +190,7 @@ impl Vm {
             snapshot_fired_at_capture_len: None,
             counters: crate::counters::Counters::new(),
             profiler: crate::profile::Profiler::default(),
+            host: crate::host_ui::HostUi::new(),
         })
     }
 }

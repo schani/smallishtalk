@@ -47,6 +47,13 @@ pub struct Counters {
     pub nlrs: u64,
     pub cache_flushes: u64,
     pub method_installs: u64,
+    // --- Always-on: UI work metrics (UI.md §13) ---
+    // Deterministic under the virtual clock, so CI can assert budgets on them.
+    pub bitblt_calls: u64,
+    pub pixels_blitted: u64,
+    pub glyphs_drawn: u64,
+    pub events_processed: u64,
+    pub frames_presented: u64,
     // --- Gated tier ---
     pub gate: bool,
     pub insns: u64,
@@ -87,6 +94,11 @@ impl Counters {
             nlrs: 0,
             cache_flushes: 0,
             method_installs: 0,
+            bitblt_calls: 0,
+            pixels_blitted: 0,
+            glyphs_drawn: 0,
+            events_processed: 0,
+            frames_presented: 0,
             gate: false,
             insns: 0,
             sends: 0,
@@ -231,6 +243,12 @@ impl Vm {
         r(&mut rows, "nlr.count", c.nlrs);
         r(&mut rows, "cache.flushes", c.cache_flushes);
         r(&mut rows, "method.installs", c.method_installs);
+
+        r(&mut rows, "ui.bitblt_calls", c.bitblt_calls);
+        r(&mut rows, "ui.pixels_blitted", c.pixels_blitted);
+        r(&mut rows, "ui.glyphs_drawn", c.glyphs_drawn);
+        r(&mut rows, "ui.events_processed", c.events_processed);
+        r(&mut rows, "ui.frames_presented", c.frames_presented);
 
         r(&mut rows, "gated.enabled", c.gate as u64);
         r(&mut rows, "insn.count", c.insns);

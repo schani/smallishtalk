@@ -93,6 +93,9 @@ pub struct Vm {
     pub counters: Counters,
     /// The sampling profiler (profiling plan §2).
     pub profiler: Profiler,
+    /// Host-side UI state: the ARGB present buffer, the (scripted or live)
+    /// event queue, and the selected clock (UI.md §3/§4A). Not persisted.
+    pub host: crate::host_ui::HostUi,
 }
 
 impl Vm {
@@ -123,6 +126,7 @@ impl Vm {
             snapshot_fired_at_capture_len: None,
             counters: Counters::new(),
             profiler: Profiler::default(),
+            host: crate::host_ui::HostUi::new(),
         };
         vm.bootstrap();
         vm

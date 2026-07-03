@@ -351,8 +351,15 @@ pub const PRIM_STDIO_READ: u16 = 311;
 pub const PRIM_CLOCK_MONOTONIC_MS: u16 = 320;
 pub const PRIM_CLOCK_WALL_MS: u16 = 321;
 pub const PRIM_SIGNAL_AT_MS: u16 = 322;
+/// High-resolution monotonic clock for per-frame UI profiling (UI.md §4.4).
+/// Honors the virtual clock in headless/deterministic mode.
+pub const PRIM_CLOCK_MONOTONIC_NS: u16 = 323;
 pub const PRIM_NEXT_EVENT: u16 = 330;
 pub const PRIM_PIXEL_BLIT: u16 = 331;
+/// The BitBlt workhorse — the one drawing op in Rust (UI.md §4.3).
+pub const PRIM_BITBLT: u16 = 332;
+/// Save a Form to a PNG file — screenshots for operability (UI.md §4.4).
+pub const PRIM_SAVE_FORM: u16 = 333;
 pub const PRIM_SNAPSHOT: u16 = 400;
 pub const PRIM_REGISTER_CLASS: u16 = 401;
 pub const PRIM_METHOD_INSTALL: u16 = 402;
@@ -537,7 +544,9 @@ pub fn all_constants() -> Vec<(&'static str, &'static str, u64)> {
             PRIM_FILE_POSITION, PRIM_FILE_SET_POSITION, PRIM_FILE_SIZE,
             PRIM_FILE_DELETE, PRIM_STDIO_WRITE, PRIM_STDIO_READ,
             PRIM_CLOCK_MONOTONIC_MS, PRIM_CLOCK_WALL_MS, PRIM_SIGNAL_AT_MS,
-            PRIM_NEXT_EVENT, PRIM_PIXEL_BLIT, PRIM_SNAPSHOT, PRIM_REGISTER_CLASS,
+            PRIM_CLOCK_MONOTONIC_NS,
+            PRIM_NEXT_EVENT, PRIM_PIXEL_BLIT, PRIM_BITBLT, PRIM_SAVE_FORM,
+            PRIM_SNAPSHOT, PRIM_REGISTER_CLASS,
             PRIM_METHOD_INSTALL, PRIM_FLUSH_CACHES, PRIM_FRAME_INFO,
             PRIM_PROFILER_START, PRIM_PROFILER_STOP, PRIM_PROFILER_REPORT,
             PRIM_PROFILER_TREE, PRIM_VM_COUNTERS, PRIM_VM_COUNTERS_RESET,
