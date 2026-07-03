@@ -8,7 +8,15 @@ fn main() {
         eprintln!("usage: smallishtalk <image.im>");
         std::process::exit(2);
     };
-    let mut vm = match Vm::load_image(path, VmConfig::default()) {
+    // Test/debug knob: SMALLISHTALK_YOUNG_BYTES overrides the young-space
+    // size (GC-stress reproduction outside the cargo test harness).
+    let mut config = VmConfig::default();
+    if let Some(v) = std::env::var_os("SMALLISHTALK_YOUNG_BYTES") {
+        if let Ok(n) = v.to_string_lossy().parse::<usize>() {
+            config.heap.young_bytes = n;
+        }
+    }
+    let mut vm = match Vm::load_image(path, config) {
         Ok(vm) => vm,
         Err(e) => {
             eprintln!("cannot load image {path}: {e:?}");
@@ -26,6 +34,9 @@ fn main() {
         Ok(_) => {}
         Err(e) => {
             eprintln!("VM error: {e:?}");
+            if std::env::var_os("SMALLISHTALK_STATS").is_some_and(|v| v == "1") {
+                eprint!("{}", vm.format_stats());
+            }
             std::process::exit(1);
         }
     }

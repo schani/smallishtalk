@@ -22,7 +22,16 @@ impl Vm {
     /// Dispatch primitive `n`. Receiver at bytecode slot `r`, args at
     /// `r+1..r+argc`; a successful non-control primitive's value goes to
     /// `dest` (handled by the caller); control primitives push/switch
-    /// frames themselves using `r`/`dest`.
+    /// frames themselves using `r`/`dest`. `site` is the send-site index
+    /// of the send that invoked the primitive (RETINFO_NO_SITE when none)
+    /// — frame-pushing primitives thread it into the callee's returnInfo.
+    ///
+    /// Retire-then-suspend (JIT.md §10, normative for both tiers): a
+    /// primitive that relinquishes the processor with the current process
+    /// due to resume later at the post-send pc first delivers its result
+    /// to `dest`, so every suspension point in the system is a completed
+    /// send — nothing ever resumes "inside" a primitive.
+    #[allow(clippy::too_many_arguments)]
     pub fn run_primitive(
         &mut self,
         n: u16,
@@ -30,6 +39,7 @@ impl Vm {
         r: u8,
         argc: usize,
         dest: u8,
+        site: u8,
     ) -> Result<PrimOutcome, VmError> {
         self.counters.prim_calls[n as usize] += 1;
         // Attribute long-primitive time (plan §2): if a sample came due
@@ -39,13 +49,14 @@ impl Vm {
             let leaf = format!("<vm:prim:{n}>");
             self.take_sample(regs.stack, regs.frame, Some(&leaf));
         }
-        let outcome = self.dispatch_primitive(n, regs, r, argc, dest);
+        let outcome = self.dispatch_primitive(n, regs, r, argc, dest, site);
         if let Ok(PrimOutcome::Fail(_)) = outcome {
             self.counters.prim_fails[n as usize] += 1;
         }
         outcome
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn dispatch_primitive(
         &mut self,
         n: u16,
@@ -53,20 +64,21 @@ impl Vm {
         r: u8,
         argc: usize,
         dest: u8,
+        site: u8,
     ) -> Result<PrimOutcome, VmError> {
         match n {
             PRIM_BLOCK_VALUE_0 | PRIM_BLOCK_VALUE_1 | PRIM_BLOCK_VALUE_2
             | PRIM_BLOCK_VALUE_3 | PRIM_BLOCK_VALUE_4 => {
                 let want = (n - PRIM_BLOCK_VALUE_0) as usize;
-                self.prim_block_value(regs, r, argc, dest, want)
+                self.prim_block_value(regs, r, argc, dest, want, site)
             }
-            PRIM_BLOCK_VALUE_ARGS => self.prim_block_value_args(regs, r, dest),
-            PRIM_TRANSFER_TO => self.prim_transfer_to(regs, r),
-            PRIM_SEMAPHORE_WAIT => self.prim_semaphore_wait(regs, r),
-            PRIM_SEMAPHORE_SIGNAL => self.prim_semaphore_signal(regs, r),
-            PRIM_YIELD => self.prim_yield(regs, r),
-            PRIM_PROCESS_RESUME => self.prim_process_resume(regs, r),
-            PRIM_PROCESS_SUSPEND => self.prim_process_suspend(regs, r),
+            PRIM_BLOCK_VALUE_ARGS => self.prim_block_value_args(regs, r, dest, site),
+            PRIM_TRANSFER_TO => self.prim_transfer_to(regs, r, dest),
+            PRIM_SEMAPHORE_WAIT => self.prim_semaphore_wait(regs, r, dest),
+            PRIM_SEMAPHORE_SIGNAL => self.prim_semaphore_signal(regs, r, dest),
+            PRIM_YIELD => self.prim_yield(regs, r, dest),
+            PRIM_PROCESS_RESUME => self.prim_process_resume(regs, r, dest),
+            PRIM_PROCESS_SUSPEND => self.prim_process_suspend(regs, r, dest),
             PRIM_PROCESS_TERMINATE => self.prim_process_terminate(regs, r),
             PRIM_SIGNAL_AT_MS => {
                 let sem = self.get(regs, r + 1);
@@ -87,7 +99,7 @@ impl Vm {
             PRIM_UNWIND_TO => self.prim_unwind_to(regs, r),
             PRIM_HANDLER_INFO => self.prim_handler_info(regs, r),
             PRIM_SET_HANDLER_STATE => self.prim_set_handler_state(regs, r),
-            PRIM_SIGNAL_CONTEXT => self.prim_signal_context(regs),
+            PRIM_SIGNAL_CONTEXT => self.prim_signal_context(regs, r),
 
             PRIM_CLASS => Ok(PrimOutcome::Value(self.class_of(self.get(regs, r)))),
             PRIM_IDENTITY_HASH => {
@@ -153,7 +165,7 @@ impl Vm {
                 self.store_slot(recv.as_ptr(), (i - 1) as usize, val);
                 Ok(PrimOutcome::Value(val))
             }
-            PRIM_PERFORM_WITH_ARGS => self.prim_perform(regs, r, dest),
+            PRIM_PERFORM_WITH_ARGS => self.prim_perform(regs, r, dest, site),
 
             PRIM_INT_ADD | PRIM_INT_SUB | PRIM_INT_MUL | PRIM_INT_DIV | PRIM_INT_MOD
             | PRIM_INT_QUO | PRIM_INT_BIT_AND | PRIM_INT_BIT_OR | PRIM_INT_BIT_XOR
@@ -372,7 +384,114 @@ impl Vm {
                 Ok(PrimOutcome::Value(self.get(regs, r)))
             }
 
+            // --- JIT band 430–439 (JIT.md Part V, Annex J.6) ---
+            PRIM_JIT_NEXT_REQUEST => Ok(PrimOutcome::Value(self.jit_next_request())),
+            PRIM_JIT_QUEUE_SIZE => Ok(PrimOutcome::Value(Value::from_int(
+                self.jit.as_ref().map_or(0, |j| j.queue.len() as i64),
+            ))),
+            PRIM_JIT_INSTALL => self.prim_jit_install(regs, r),
+            PRIM_JIT_CONTROL => {
+                let op = self.get(regs, r + 1);
+                let arg = self.get(regs, r + 2);
+                if !op.is_int() {
+                    return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+                }
+                // The two ops with non-integer argument/result:
+                if op.as_int() == JITCTL_GET_SEMAPHORE {
+                    return Ok(PrimOutcome::Value(self.specials()[SPECIAL_JIT_SEMAPHORE]));
+                }
+                if op.as_int() == JITCTL_MARK_DNC {
+                    if !arg.is_ptr()
+                        || !matches!(
+                            self.heap.header(arg.as_ptr()).class_index(),
+                            CLASS_COMPILEDMETHOD | CLASS_COMPILEDBLOCK
+                        )
+                    {
+                        return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+                    }
+                    let vs = self.vmstate_of(arg);
+                    let cleared = vs & !(1 << VMSTATE_QUEUED_SHIFT);
+                    self.set_vmstate(arg, cleared | (1 << VMSTATE_DNC_SHIFT));
+                    return Ok(PrimOutcome::Value(arg));
+                }
+                if !arg.is_int() {
+                    return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+                }
+                match self.jit_control(op.as_int(), arg.as_int()) {
+                    Ok(v) => Ok(PrimOutcome::Value(Value::from_int(v))),
+                    Err(code) => Ok(PrimOutcome::Fail(code)),
+                }
+            }
+            // primJITCodeInfo: method -> {handle. codeLen. entryOff.
+            // reentryCount. retptsCount. patchCount}, or fail when no
+            // live code (the profiler's and disassembler's window).
+            PRIM_JIT_CODE_INFO => {
+                let m = self.get(regs, r + 1);
+                if !m.is_ptr()
+                    || !matches!(
+                        self.heap.header(m.as_ptr()).class_index(),
+                        CLASS_COMPILEDMETHOD | CLASS_COMPILEDBLOCK
+                    )
+                {
+                    return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+                }
+                let Some(idx) = self.jit_handle_of(m) else {
+                    return Ok(PrimOutcome::Fail(FAIL_NOT_FOUND));
+                };
+                let (len, entry, nre, nrp, np) = {
+                    let h = &self.jit.as_ref().unwrap().handles[idx];
+                    (
+                        h.code_len as i64,
+                        h.entry_off as i64,
+                        h.reentry.len() as i64,
+                        h.retpts.len() as i64,
+                        h.patch_sites.len() as i64,
+                    )
+                };
+                let arr = self.alloc_gc(regs, CLASS_ARRAY, FMT_PTRS, 6)?;
+                let a = arr.as_ptr();
+                for (i, v) in [idx as i64, len, entry, nre, nrp, np].iter().enumerate() {
+                    self.heap.set_slot_raw(a, i, Value::from_int(*v));
+                }
+                Ok(PrimOutcome::Value(arr))
+            }
+            // primReadSamples: the raw in-image sample stream is v1.x;
+            // reports flow through primProfilerReport + primVmCounters.
+            PRIM_JIT_READ_SAMPLES => Ok(PrimOutcome::Fail(FAIL_UNSUPPORTED_CONTEXT)),
+
             _ => Ok(PrimOutcome::Fail(FAIL_UNKNOWN_PRIM)),
+        }
+    }
+
+    /// primJITInstall: method code: aByteArray maps: aByteArray → handle
+    /// index (JIT.md §5). Structural validation only — the machine code
+    /// itself is trusted exactly like installed bytecode (JIT.md §2).
+    fn prim_jit_install(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+        let method = self.get(regs, r + 1);
+        let code = self.get(regs, r + 2);
+        let maps = self.get(regs, r + 3);
+        if !method.is_ptr()
+            || !matches!(
+                self.heap.header(method.as_ptr()).class_index(),
+                CLASS_COMPILEDMETHOD | CLASS_COMPILEDBLOCK
+            )
+            || !code.is_ptr()
+            || !self.heap.header(code.as_ptr()).is_bytes()
+            || !maps.is_ptr()
+            || !self.heap.header(maps.as_ptr()).is_bytes()
+        {
+            return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+        }
+        let code_bytes = self.heap.bytes(code.as_ptr()).to_vec();
+        let maps_bytes = self.heap.bytes(maps.as_ptr()).to_vec();
+        match self.jit_install(method, &code_bytes, &maps_bytes) {
+            Ok(handle) => Ok(PrimOutcome::Value(Value::from_int(handle as i64))),
+            Err(msg) => {
+                // Structural rejection: visible on stderr, clean failure
+                // to the image.
+                eprintln!("primJITInstall rejected: {msg}");
+                Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE))
+            }
         }
     }
 
@@ -477,8 +596,16 @@ impl Vm {
     }
 
     /// perform: selector withArguments: array — re-dispatch: spread the
-    /// arguments over the staging slots after the receiver and send.
-    fn prim_perform(&mut self, regs: &mut Regs, r: u8, dest: u8) -> Result<PrimOutcome, VmError> {
+    /// arguments over the staging slots after the receiver and send. The
+    /// re-dispatched send inherits the perform send's site, so its return
+    /// delivers to the perform continuation.
+    fn prim_perform(
+        &mut self,
+        regs: &mut Regs,
+        r: u8,
+        dest: u8,
+        site: u8,
+    ) -> Result<PrimOutcome, VmError> {
         let selector = self.get(regs, r + 1);
         let args = self.get(regs, r + 2);
         if !selector.is_ptr()
@@ -499,20 +626,19 @@ impl Vm {
             let v = self.heap.slot(args.as_ptr(), i);
             self.put(regs, r + 1 + i as u8, v);
         }
-        self.do_send(regs, dest, r, selector, n, None, None)?;
+        self.do_send(regs, dest, r, selector, n, None, None, site)?;
         Ok(PrimOutcome::Control)
     }
 
-    /// valueWithArguments: — spread the array, then activate like value:.
+    /// valueWithArguments: — spread the array, then activate like value:
+    /// (tail-replacing in the framed convention, like prim_block_value).
     fn prim_block_value_args(
         &mut self,
         regs: &mut Regs,
         r: u8,
         dest: u8,
+        site: u8,
     ) -> Result<PrimOutcome, VmError> {
-        if (r as usize) < FRAME_RECEIVER {
-            return Ok(PrimOutcome::Fail(FAIL_UNSUPPORTED_CONTEXT));
-        }
         let closure = self.get(regs, r);
         let args = self.get(regs, r + 1);
         if !closure.is_ptr()
@@ -527,15 +653,21 @@ impl Vm {
         if self.method_argc(block) != n {
             return Ok(PrimOutcome::Fail(FAIL_WRONG_ARGC));
         }
+        self.bump_invocation(block);
         let needed = regs.frame + FRAME_RECEIVER + r as usize + 1 + n;
         if needed > self.heap.num_slots(regs.stack) as usize {
             self.grow_stack(regs, needed)?;
         }
+        let args = self.get(regs, r + 1); // re-read post-growth (same stack contents)
         for i in 0..n {
             let v = self.heap.slot(args.as_ptr(), i);
             self.put(regs, r + 1 + i as u8, v);
         }
-        self.push_frame(regs, block, r, dest, n, None, FLAG_BLOCKCTX)?;
+        if r == 0 {
+            self.tail_activate_block(regs, block, n)?;
+        } else {
+            self.push_frame(regs, block, r, dest, n, None, FLAG_BLOCKCTX, site)?;
+        }
         Ok(PrimOutcome::Control)
     }
 
@@ -900,9 +1032,7 @@ impl Vm {
                 return Ok(p);
             }
             if self.timer_requests.is_empty() {
-                return Err(VmError::Fatal(
-                    "deadlock: no runnable process and no pending timers".into(),
-                ));
+                return Err(VmError::Deadlock);
             }
             if !self.service_timers() {
                 std::thread::sleep(std::time::Duration::from_millis(1));
@@ -928,10 +1058,23 @@ impl Vm {
         fired
     }
 
-    /// signal without preemption (timer/event side).
+    /// signal from VM internals (timers, the JIT trip): no direct switch,
+    /// but waking a process that outranks the running one arms the
+    /// safepoint so the next poll preempts — otherwise a CPU-bound
+    /// process starves every high-priority service process (the
+    /// background JIT compiler, notably) indefinitely.
     pub fn semaphore_signal_internal(&mut self, sem: Value) {
         if let Some(p) = self.dequeue_process(sem, SEMAPHORE_QUEUE_HEAD, SEMAPHORE_QUEUE_TAIL) {
             self.make_runnable(p);
+            let cur = self.active_process;
+            if cur.is_ptr()
+                && cur != self.nil()
+                && self.process_priority(p) > self.process_priority(cur)
+            {
+                self.safepoint
+                    .armed
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            }
         } else {
             let n = self.heap.slot(sem.as_ptr(), SEMAPHORE_EXCESS_SIGNALS).as_int();
             self.heap
@@ -939,17 +1082,42 @@ impl Vm {
         }
     }
 
-    fn prim_transfer_to(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+    /// Retire-then-suspend (JIT.md §10), both conventions: frameless
+    /// (send-level, r >= FRAME_RECEIVER) delivers the result to the
+    /// caller's dest slot; framed (r == 0: the primitive runs inside its
+    /// own pushed frame, compiled tier) retires the whole activation via
+    /// the no-re-entry return, leaving the process parked at the
+    /// completed send.
+    fn retire_or_put(
+        &mut self,
+        regs: &mut Regs,
+        r: u8,
+        dest: u8,
+        v: Value,
+    ) -> Result<(), VmError> {
+        if r == 0 {
+            self.do_return_core(regs, v, false)
+        } else {
+            self.put(regs, dest, v);
+            Ok(())
+        }
+    }
+
+    fn prim_transfer_to(&mut self, regs: &mut Regs, r: u8, dest: u8) -> Result<PrimOutcome, VmError> {
         let nil = self.nil();
         let target = self.get(regs, r);
         if !self.is_process(target) || self.heap.slot(target.as_ptr(), PROCESS_STACK) == nil {
             return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
         }
+        // Retire first: when this process is transferred back to, the send
+        // has completed and its result (the receiver) is already delivered.
+        let recv = self.get(regs, r);
+        self.retire_or_put(regs, r, dest, recv)?;
         self.transfer_to(regs, target);
         Ok(PrimOutcome::Control)
     }
 
-    fn prim_semaphore_wait(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+    fn prim_semaphore_wait(&mut self, regs: &mut Regs, r: u8, dest: u8) -> Result<PrimOutcome, VmError> {
         let sem = self.get(regs, r);
         if !sem.is_ptr() || self.heap.header(sem.as_ptr()).class_index() != CLASS_SEMAPHORE {
             return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
@@ -960,8 +1128,10 @@ impl Vm {
                 .set_slot_raw(sem.as_ptr(), SEMAPHORE_EXCESS_SIGNALS, Value::from_int(n - 1));
             return Ok(PrimOutcome::Value(sem));
         }
-        // Block: enqueue on the semaphore, run someone else.
+        // Block: retire (deliver the result now — on wake the process
+        // resumes at the completed send), enqueue, run someone else.
         self.counters.semaphore_blocks += 1;
+        self.retire_or_put(regs, r, dest, sem)?;
         let cur = self.active_process;
         self.save_regs(regs);
         self.enqueue_process(sem, SEMAPHORE_QUEUE_HEAD, SEMAPHORE_QUEUE_TAIL, cur);
@@ -970,7 +1140,7 @@ impl Vm {
         Ok(PrimOutcome::Control)
     }
 
-    fn prim_semaphore_signal(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+    fn prim_semaphore_signal(&mut self, regs: &mut Regs, r: u8, dest: u8) -> Result<PrimOutcome, VmError> {
         let sem = self.get(regs, r);
         if !sem.is_ptr() || self.heap.header(sem.as_ptr()).class_index() != CLASS_SEMAPHORE {
             return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
@@ -979,6 +1149,8 @@ impl Vm {
             let cur = self.active_process;
             if self.process_priority(p) > self.process_priority(cur) {
                 // Preempt: current goes runnable, the waiter runs now.
+                // Retire first (resume point = completed send).
+                self.retire_or_put(regs, r, dest, sem)?;
                 self.make_runnable(cur);
                 self.transfer_to(regs, p);
                 return Ok(PrimOutcome::Control);
@@ -992,7 +1164,7 @@ impl Vm {
         Ok(PrimOutcome::Value(sem))
     }
 
-    fn prim_yield(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+    fn prim_yield(&mut self, regs: &mut Regs, r: u8, dest: u8) -> Result<PrimOutcome, VmError> {
         let cur = self.active_process;
         self.make_runnable(cur);
         let next = self.pick_next_or_wait()?;
@@ -1001,11 +1173,13 @@ impl Vm {
             self.heap.set_slot_raw(cur.as_ptr(), PROCESS_MY_LIST, nil);
             return Ok(PrimOutcome::Value(self.get(regs, r)));
         }
+        let recv = self.get(regs, r);
+        self.retire_or_put(regs, r, dest, recv)?;
         self.transfer_to(regs, next);
         Ok(PrimOutcome::Control)
     }
 
-    fn prim_process_resume(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+    fn prim_process_resume(&mut self, regs: &mut Regs, r: u8, dest: u8) -> Result<PrimOutcome, VmError> {
         let nil = self.nil();
         let p = self.get(regs, r);
         if !self.is_process(p)
@@ -1017,6 +1191,7 @@ impl Vm {
         }
         let cur = self.active_process;
         if self.process_priority(p) > self.process_priority(cur) {
+            self.retire_or_put(regs, r, dest, p)?;
             self.make_runnable(cur);
             self.transfer_to(regs, p);
             return Ok(PrimOutcome::Control);
@@ -1025,12 +1200,13 @@ impl Vm {
         Ok(PrimOutcome::Value(p))
     }
 
-    fn prim_process_suspend(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+    fn prim_process_suspend(&mut self, regs: &mut Regs, r: u8, dest: u8) -> Result<PrimOutcome, VmError> {
         let p = self.get(regs, r);
         if !self.is_process(p) {
             return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
         }
         if p == self.active_process {
+            self.retire_or_put(regs, r, dest, p)?;
             self.save_regs(regs);
             let next = self.pick_next_or_wait()?;
             self.transfer_to(regs, next);
@@ -1138,7 +1314,7 @@ impl Vm {
         self.store_slot(
             sa,
             new_off + FRAME_RETINFO,
-            Value::from_int(t_pc << RETINFO_PC_SHIFT),
+            Value::from_int((RETINFO_NO_SITE as i64) | (t_pc << RETINFO_PC_SHIFT)),
         );
         self.store_slot(sa, new_off + FRAME_METHOD, tramp);
         self.store_slot(sa, new_off + FRAME_FLAGS, Value::from_int(serial << SERIAL_SHIFT));
@@ -1356,13 +1532,22 @@ impl Vm {
 
     /// signalContext → {senderFrameOffset. senderFrameSerial} — the frame
     /// that sent this primitive's method becomes the exception's signal
-    /// frame (resume: unwinds back to it).
-    fn prim_signal_context(&mut self, regs: &mut Regs) -> Result<PrimOutcome, VmError> {
+    /// frame (resume: unwinds back to it). In the framed convention the
+    /// primitive's own frame is skipped: its caller is the signal method.
+    fn prim_signal_context(&mut self, regs: &mut Regs, r: u8) -> Result<PrimOutcome, VmError> {
+        let mut off = regs.frame;
+        if r == 0 {
+            let caller = self.heap.slot(regs.stack, regs.frame + FRAME_CALLER);
+            if !caller.is_int() || caller.as_int() == 0 {
+                return Ok(PrimOutcome::Fail(FAIL_UNSUPPORTED_CONTEXT));
+            }
+            off = caller.as_int() as usize;
+        }
         let arr = self.alloc_gc(regs, CLASS_ARRAY, FMT_PTRS, 2)?;
-        let flags = self.frame_flags_at(regs, regs.frame);
+        let flags = self.frame_flags_at(regs, off);
         let a = arr.as_ptr();
         self.heap
-            .set_slot_raw(a, 0, Value::from_int(regs.frame as i64));
+            .set_slot_raw(a, 0, Value::from_int(off as i64));
         self.heap
             .set_slot_raw(a, 1, Value::from_int(flags.as_int() >> SERIAL_SHIFT));
         Ok(PrimOutcome::Value(arr))
@@ -1447,7 +1632,12 @@ impl Vm {
 
     /// BlockClosure>>value... — activate the block: push a frame whose
     /// method is the CompiledBlock and whose receiver slot holds the
-    /// closure itself (§10).
+    /// closure itself (§10). In the *framed* convention (r == 0: a frame
+    /// for the value-method exists, pushed by a compiled send or by
+    /// CALL_INTERP), the block activation *replaces* that frame — a tail
+    /// call: closure and args already sit at slots 0..argc, and the
+    /// block's return delivers straight to the original sender.
+    #[allow(clippy::too_many_arguments)]
     fn prim_block_value(
         &mut self,
         regs: &mut Regs,
@@ -1455,12 +1645,8 @@ impl Vm {
         argc: usize,
         dest: u8,
         want: usize,
+        site: u8,
     ) -> Result<PrimOutcome, VmError> {
-        if (r as usize) < FRAME_RECEIVER {
-            // Entered via OP_PRIM in a directly-run method: there is no
-            // send staging area to overlap. Fall back.
-            return Ok(PrimOutcome::Fail(FAIL_UNSUPPORTED_CONTEXT));
-        }
         let closure = self.get(regs, r);
         if !closure.is_ptr()
             || self.heap.header(closure.as_ptr()).class_index() != CLASS_BLOCKCLOSURE
@@ -1471,7 +1657,59 @@ impl Vm {
         if argc != want || self.method_argc(block) != want {
             return Ok(PrimOutcome::Fail(FAIL_WRONG_ARGC));
         }
-        self.push_frame(regs, block, r, dest, argc, None, FLAG_BLOCKCTX)?;
+        // Blocks tier independently (JIT.md §3).
+        self.bump_invocation(block);
+        if r == 0 {
+            self.tail_activate_block(regs, block, argc)?;
+        } else {
+            self.push_frame(regs, block, r, dest, argc, None, FLAG_BLOCKCTX, site)?;
+        }
         Ok(PrimOutcome::Control)
+    }
+
+    /// Replace the current frame with a block activation (framed value
+    /// primitives): keep callerFrameOffset and returnInfo, swap the
+    /// method, restamp flags with a fresh serial and FLAG_BLOCKCTX.
+    fn tail_activate_block(
+        &mut self,
+        regs: &mut Regs,
+        block: Value,
+        argc: usize,
+    ) -> Result<(), VmError> {
+        let fs = self.method_frame_slots(block);
+        let needed = regs.frame + FRAME_RECEIVER + fs;
+        if needed > self.heap.num_slots(regs.stack) as usize {
+            self.grow_stack(regs, needed)?;
+        }
+        let serial = self.bump_serial();
+        let mh_flags = (self.method_header_bits(block) >> MH_FLAGS_SHIFT) as u64;
+        let mut fflags = FLAG_BLOCKCTX;
+        if mh_flags & MH_FLAG_IS_HANDLER != 0 {
+            fflags |= FLAG_HANDLER;
+        }
+        if mh_flags & MH_FLAG_IS_ENSURE != 0 {
+            fflags |= FLAG_ENSURE;
+        }
+        self.heap.set_slot_raw(regs.stack, regs.frame + FRAME_METHOD, block);
+        self.heap.set_slot_raw(
+            regs.stack,
+            regs.frame + FRAME_FLAGS,
+            Value::from_int((fflags as i64) | ((serial as i64) << SERIAL_SHIFT)),
+        );
+        let nil = self.nil();
+        for k in (1 + argc)..fs {
+            self.heap
+                .set_slot_raw(regs.stack, regs.frame + FRAME_RECEIVER + k, nil);
+        }
+        self.reload_code(regs);
+        regs.pc = 0;
+        // A fresh activation: a compiled block enters natively (guarded
+        // against nesting when we are already below the trampoline).
+        if self.jit.is_some() {
+            if let Some(addr) = self.native_resume_addr(regs) {
+                return self.enter_native(regs, addr);
+            }
+        }
+        Ok(())
     }
 }

@@ -17,6 +17,11 @@ st/compiler/CodeGen.st
 st/compiler/Encoder.st
 st/compiler/ImageWriter.st
 st/compiler/Compiler.st
+st/jit/AMD64Assembler.st
+st/jit/AMD64Disassembler.st
+st/jit/AMD64Goldens.st
+st/jit/AMD64MacroAssembler.st
+st/jit/MethodCompiler.st
 "
 
 TESTS="
@@ -27,6 +32,8 @@ st/tests/CodeGenTests.st
 st/tests/CaptureTests.st
 st/tests/EncoderTests.st
 st/tests/ImageWriterTests.st
+st/tests/AMD64AssemblerTests.st
+st/tests/MethodCompilerTests.st
 "
 
 FILES=""

@@ -350,6 +350,7 @@ materializeMethod: spec forClassDesc: d classSide: isMeta
 			ifTrue: [nilObj]
 			ifFalse: [isMeta ifTrue: [d metaObj] ifFalse: [d classObj]]).
 	m at: Treaty methodSourceInfo + 1 put: nilObj.
+	m at: Treaty methodVmstate + 1 put: 0.
 	^m!
 
 materializeBlock: spec outer: outerObj classDesc: d classSide: isMeta
@@ -363,6 +364,8 @@ materializeBlock: spec outer: outerObj classDesc: d classSide: isMeta
 	info := spec numCaptured bitOr:
 		((spec hasNlr ifTrue: [1] ifFalse: [0]) bitShift: Treaty biHasNlrShift).
 	b at: Treaty blockInfo + 1 put: info.
+	b at: Treaty blockPad + 1 put: 0.
+	b at: Treaty blockVmstate + 1 put: 0.
 	^b!
 
 packHeaderFor: spec
@@ -435,6 +438,7 @@ sitesObjFor: spec classDesc: d classSide: isMeta
 		arr at: base + Treaty siteArgc + 1 put: site argc.
 		arr at: base + Treaty siteCacheClass + 1 put: 0.
 		arr at: base + Treaty siteCacheMethod + 1 put: nilObj.
+		arr at: base + Treaty siteCounters + 1 put: 0.
 		arr at: base + Treaty siteStaticClass + 1
 			put: (site isSuper
 				ifTrue: [d isNil
@@ -506,7 +510,7 @@ mdictFor: selectors objs: methodObjs
 buildSpecialsWithStartUp: startUpObj
 	"scheduler, semaphores, class list, symbol table, specialized
 	 selectors, the poised process, and the special objects array"
-	| sched queues classList maxIdx symtab specSels sels lowSem timerSem dnuSym mbbSym |
+	| sched queues classList maxIdx symtab specSels sels lowSem timerSem jitSem profSem dnuSym mbbSym |
 	dnuSym := self symbolFor: 'doesNotUnderstand:'.
 	mbbSym := self symbolFor: 'mustBeBoolean'.
 	smalltalkObj := self addObj: (StObj fixed: Treaty classSystemDictionary slots: 0).
@@ -545,6 +549,8 @@ buildSpecialsWithStartUp: startUpObj
 
 	lowSem := self semaphoreObj.
 	timerSem := self semaphoreObj.
+	jitSem := self semaphoreObj.
+	profSem := self semaphoreObj.
 
 	"the poised process: one frame at the base, at startUp's first insn"
 	stackObj := self addObj: (StObj ptrs: Treaty classStack slots: 512).
@@ -587,7 +593,9 @@ buildSpecialsWithStartUp: startUpObj
 	specialsObj at: Treaty specialSelMustBeBoolean + 1 put: mbbSym.
 	specialsObj at: Treaty specialTerminateTrampoline + 1 put: self terminateTrampolineObj.
 	specialsObj at: Treaty specialLowSpaceSemaphore + 1 put: lowSem.
-	specialsObj at: Treaty specialTimerSemaphore + 1 put: timerSem!
+	specialsObj at: Treaty specialTimerSemaphore + 1 put: timerSem.
+	specialsObj at: Treaty specialJitSemaphore + 1 put: jitSem.
+	specialsObj at: Treaty specialProfilerSemaphore + 1 put: profSem!
 
 terminateTrampolineObj
 	"§11: the process-termination trampoline — a method whose primitive
@@ -701,7 +709,7 @@ imageBytes
 	objects do: [:o | oldSize := oldSize + (o footprintWords * 8)].
 	"header (A.5)"
 	out add: 83; add: 84; add: 73; add: 77.	"STIM"
-	out add: 1; add: 0; add: 0; add: 0.	"version 1"
+	out add: Treaty imgVersion; add: 0; add: 0; add: 0.
 	self emitWord: 0 into: out.	"flags"
 	self emitWord: StImageWriter savedBase into: out.
 	self emitWord: oldSize into: out.

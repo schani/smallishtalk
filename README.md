@@ -1,9 +1,10 @@
 # smallishtalk
 
-A complete implementation of [SPEC.md](SPEC.md): the Rust VM (**interpreter
-only, no JIT**) *and* the Smalltalk-side compiler with its GNU Smalltalk
-bootstrap, through the spec's Phase 5 — the compiler self-hosts on the VM
-and its output is bit-identical to the GST cross-compile.
+A complete implementation of [SPEC.md](SPEC.md): the Rust VM (interpreter
+**plus a template JIT for AMD64**, see [JIT.md](JIT.md)) *and* the
+Smalltalk-side compiler with its GNU Smalltalk bootstrap, through the spec's
+Phase 5 — the compiler self-hosts on the VM and its output is bit-identical to
+the GST cross-compile.
 
 ## Usage
 
@@ -52,6 +53,33 @@ cargo run --bin gen_treaty_st       # rewrites st/compiler/Treaty.st
 
 **Benchmarks**: `make bench` (median-of-5 with a GST-ratio column; history in
 `bench/history.csv`). Profile from inside any image with `Profiler spy: [...]`.
+
+### Running with the JIT (this branch)
+
+This branch adds a **template JIT for AMD64** (see [JIT.md](JIT.md)). The JIT
+compiler is written in Smalltalk and lives in the image (`st/jit/`); the VM
+contributes a small set of primitives, runtime stubs, patch routines and the
+W^X code cache (the VM's only external dependency, `libc`). No CLI flag or
+cargo feature is needed — the JIT is always compiled in.
+
+**Tier-up is automatic**: a hot method trips a counter and is compiled by a
+high-priority in-image JIT process, so running a JIT-enabled image is the same
+command as any other image:
+
+```sh
+cargo run --release --bin smallishtalk -- <image.im>
+```
+
+Because tier-up is asynchronous, tests that must assert code ran *compiled*
+first drain the queue via the image-side barrier `JITCompiler drain` (loops
+until the JIT queue is empty). The differential rule holds throughout: JIT
+output must equal the interpreter's bit-for-bit.
+
+```sh
+cargo test                     # includes the JIT differential + golden suites
+                               # (jit_m0_test, jit_corpus_test, jit_image_test)
+bench/run_jit.sh               # interpreter vs JIT-warmed benchmarks (checksums must agree)
+```
 
 ## The two codebases
 

@@ -39,6 +39,22 @@ pub struct Counters {
     pub gc_ssb_drained: u64,
     pub gc_ssb_drained_max: u64,
     pub gc_remembered_rebuilt: u64,
+    // --- Always-on: JIT ---
+    pub jit_enters: u64,
+    pub jit_exits: u64,
+    pub jit_trips: u64,
+    pub jit_installs: u64,
+    pub jit_queue_drops: u64,
+    pub jit_unlinks: u64,
+    /// Sampler tier residency (JIT.md §17): where samples landed.
+    pub jit_samples_native: u64,
+    pub jit_samples_interp: u64,
+    /// Diagnostics: send sites wired direct-to-native vs routed through
+    /// CALL_INTERP; activations that entered native code vs ran interpreted.
+    pub jit_sites_direct: u64,
+    pub jit_sites_interp: u64,
+    pub jit_act_native: u64,
+    pub jit_act_interp: u64,
     // --- Always-on: control events ---
     pub process_switches: u64,
     pub semaphore_blocks: u64,
@@ -80,6 +96,18 @@ impl Counters {
             gc_ssb_drained: 0,
             gc_ssb_drained_max: 0,
             gc_remembered_rebuilt: 0,
+            jit_enters: 0,
+            jit_exits: 0,
+            jit_trips: 0,
+            jit_installs: 0,
+            jit_queue_drops: 0,
+            jit_unlinks: 0,
+            jit_samples_native: 0,
+            jit_samples_interp: 0,
+            jit_sites_direct: 0,
+            jit_sites_interp: 0,
+            jit_act_native: 0,
+            jit_act_interp: 0,
             process_switches: 0,
             semaphore_blocks: 0,
             unwind_runs: 0,
@@ -224,6 +252,18 @@ impl Vm {
         r(&mut rows, "gc.ssb_drained.max", c.gc_ssb_drained_max);
         r(&mut rows, "gc.remembered_rebuilt", c.gc_remembered_rebuilt);
         r(&mut rows, "stack.growths", self.stack_grow_count);
+        r(&mut rows, "jit.enters", c.jit_enters);
+        r(&mut rows, "jit.exits", c.jit_exits);
+        r(&mut rows, "jit.trips", c.jit_trips);
+        r(&mut rows, "jit.installs", c.jit_installs);
+        r(&mut rows, "jit.queue_drops", c.jit_queue_drops);
+        r(&mut rows, "jit.unlinks", c.jit_unlinks);
+        r(&mut rows, "jit.samples_native", c.jit_samples_native);
+        r(&mut rows, "jit.samples_interp", c.jit_samples_interp);
+        r(&mut rows, "jit.sites_direct", c.jit_sites_direct);
+        r(&mut rows, "jit.sites_interp", c.jit_sites_interp);
+        r(&mut rows, "jit.act_native", c.jit_act_native);
+        r(&mut rows, "jit.act_interp", c.jit_act_interp);
         r(&mut rows, "process.switches", c.process_switches);
         r(&mut rows, "semaphore.blocks", c.semaphore_blocks);
         r(&mut rows, "unwind.runs", c.unwind_runs);

@@ -16,6 +16,10 @@ use crate::value::Value;
 pub enum VmError {
     OutOfMemory,
     StackOverflow,
+    /// No runnable process and no pending timers while one is needed.
+    /// run_until_idle treats this as a clean idle system (service
+    /// processes parked on semaphores are not an error).
+    Deadlock,
     Fatal(String),
 }
 
@@ -93,6 +97,9 @@ pub struct Vm {
     pub counters: Counters,
     /// The sampling profiler (profiling plan §2).
     pub profiler: Profiler,
+    /// The JIT (JIT.md Part V), created lazily by jit_init — interpreter-
+    /// only VMs carry no code cache.
+    pub jit: Option<Box<crate::jit::JitState>>,
 }
 
 impl Vm {
@@ -123,6 +130,7 @@ impl Vm {
             snapshot_fired_at_capture_len: None,
             counters: Counters::new(),
             profiler: Profiler::default(),
+            jit: None,
         };
         vm.bootstrap();
         vm
@@ -251,7 +259,12 @@ impl Vm {
         self.heap.set_slot_raw(sched, SCHEDULER_QUEUES, Value::from_ptr(queues));
         self.specials[SPECIAL_PROCESSOR] = Value::from_ptr(sched);
 
-        for idx in [SPECIAL_LOW_SPACE_SEMAPHORE, SPECIAL_TIMER_SEMAPHORE] {
+        for idx in [
+            SPECIAL_LOW_SPACE_SEMAPHORE,
+            SPECIAL_TIMER_SEMAPHORE,
+            SPECIAL_JIT_SEMAPHORE,
+            SPECIAL_PROFILER_SEMAPHORE,
+        ] {
             let sem = self.make_semaphore_old();
             self.specials[idx] = sem;
         }
@@ -460,9 +473,15 @@ impl Vm {
         let vals = self.heap.slot(mdict.as_ptr(), MDICT_VALUES);
         let n = self.heap.num_slots(keys.as_ptr()) as usize;
 
-        // Overwrite in place if the selector is already present.
+        // Overwrite in place if the selector is already present. The
+        // replaced method's compiled code is unlinked (JIT.md §12) —
+        // existing activations of it finish under the interpreter.
         for i in 0..n {
             if self.heap.slot(keys.as_ptr(), i) == selector {
+                let old = self.heap.slot(vals.as_ptr(), i);
+                if old.is_ptr() && old != nil {
+                    self.jit_unlink_method(old);
+                }
                 let va = vals.as_ptr();
                 self.store_slot(va, i, method);
                 self.stamp_and_flush(method, selector, class);
@@ -506,9 +525,11 @@ impl Vm {
     }
 
     /// Eager invalidation (§8): empty the global lookup cache and clear
-    /// every registered send-site's inline cache.
+    /// every registered send-site's inline cache — including the compiled
+    /// sites, patched back to the miss path (JIT.md §8).
     pub fn flush_caches(&mut self) {
         self.counters.cache_flushes += 1;
+        self.jit_clear_compiled_sites();
         for e in self.lookup_cache.iter_mut() {
             *e = LookupEntry::default();
         }
@@ -534,6 +555,7 @@ impl Vm {
         self.heap
             .set_slot_raw(class.as_ptr(), BEHAVIOR_CLASS_INDEX, Value::from_int(idx as i64));
         self.flush_caches();
+        self.jit_sync_globals(); // the class-table Vec may have reallocated
         idx
     }
 
@@ -684,7 +706,11 @@ impl Vm {
             return Ok(a);
         }
         self.collect_old()?;
-        attempt(&mut self.heap).ok_or(VmError::OutOfMemory)
+        if let Some(a) = attempt(&mut self.heap) {
+            return Ok(a);
+        }
+        self.alloc_old_fallback(class, format, n)
+            .ok_or(VmError::OutOfMemory)
     }
 
     pub fn spawn_process(

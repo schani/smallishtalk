@@ -78,6 +78,18 @@ impl Vm {
             *v = self.forward(*v, &mut work, &mut tenured);
         }
         self.timer_requests = timers;
+        // JIT roots: the compilation queue and every handle's method
+        // (JIT.md §5 — handles keep compiled methods alive).
+        let mut jit = self.jit.take();
+        if let Some(j) = jit.as_mut() {
+            for v in j.queue.iter_mut() {
+                *v = self.forward(*v, &mut work, &mut tenured);
+            }
+            for h in j.handles.iter_mut() {
+                h.method = self.forward(h.method, &mut work, &mut tenured);
+            }
+        }
+        self.jit = jit;
         let ap = self.active_process;
         self.active_process = self.forward(ap, &mut work, &mut tenured);
 
@@ -143,6 +155,7 @@ impl Vm {
         }
         self.counters.gc_remembered_rebuilt += self.heap.ssb.len() as u64;
         self.counters.scavenge_ns += pause_start.elapsed().as_nanos() as u64;
+        self.jit_sync_globals();
         Ok(())
     }
 
@@ -267,6 +280,7 @@ impl Vm {
             .copied()
             .chain(self.symbols.iter().map(|(_, v)| *v))
             .chain(self.timer_requests.iter().map(|(_, v)| *v))
+            .chain(self.jit_roots())
             .chain(std::iter::once(self.active_process))
             .collect();
         for v in &roots {
@@ -290,8 +304,29 @@ impl Vm {
         let mut fwd: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
         let mut live: Vec<usize> = Vec::new();
         self.heap.walk_region(old_base, old_top, |obj| live.push(obj));
+        // Corruption tripwire (debug builds): every walked object must have
+        // a sane header before we trust its footprint for the slide.
+        #[cfg(debug_assertions)]
+        for &obj in &live {
+            let h = self.heap.header(obj);
+            let fp = self.heap.footprint(obj);
+            assert!(
+                h.class_index() != 0
+                    && (h.class_index() as usize) < self.class_table.len()
+                    && fp < self.heap.old.limit() - self.heap.old.base(),
+                "corrupt old-space object at {obj:#x}: header {:#x} footprint {fp}",
+                h.raw()
+            );
+        }
+        // footprint() already includes the overflow word, so the cursor
+        // advances by exactly footprint — adding `extra` again (the old
+        // bug) drifted the cursor 8 bytes right per live overflow-header
+        // object, eventually sliding objects *forward* over neighbours
+        // they had not yet been read from. The move geometry is captured
+        // here, before any slide can clobber an old header.
         let mut next = old_base;
-        let mut moves: Vec<(usize, usize)> = Vec::new(); // (old obj, new obj)
+        // (old storage start, new storage start, words, new obj)
+        let mut moves: Vec<(usize, usize, usize, usize)> = Vec::new();
         for &obj in &live {
             let h = self.heap.header(obj);
             if h.gc_bits() & GC_BIT_MARK == 0 {
@@ -300,9 +335,10 @@ impl Vm {
             let start = self.heap.storage_start(obj);
             let extra = obj - start;
             let new_obj = next + extra;
+            let words = self.heap.footprint(obj) / 8;
             fwd.insert(obj, new_obj);
-            moves.push((obj, new_obj));
-            next += extra + self.heap.footprint(obj);
+            moves.push((start, next, words, new_obj));
+            next += words * 8;
         }
 
         // --- Fixup: roots, then every live object's slots ---
@@ -338,6 +374,14 @@ impl Vm {
         for i in 0..self.timer_requests.len() {
             self.timer_requests[i].1 = fix!(self.timer_requests[i].1);
         }
+        if let Some(jit) = self.jit.as_mut() {
+            for v in jit.queue.iter_mut() {
+                *v = fix!(*v);
+            }
+            for h in jit.handles.iter_mut() {
+                h.method = fix!(h.method);
+            }
+        }
         self.active_process = fix!(self.active_process);
 
         let fix_slots = |heap: &mut crate::heap::Heap, obj: usize| {
@@ -368,14 +412,13 @@ impl Vm {
         }
 
         // --- Move (ascending: sliding left, memmove-safe), clear marks,
-        // rebuild the remembered set ---
+        // rebuild the remembered set. Geometry was precomputed above: the
+        // old header must not be re-read here, an earlier slide may have
+        // overwritten it. ---
         self.heap.ssb.clear();
-        for (obj, new_obj) in &moves {
-            let start = self.heap.storage_start(*obj);
-            let words = self.heap.footprint(*obj) / 8;
-            let new_start = *new_obj - (*obj - start);
+        for (start, new_start, words, new_obj) in &moves {
             unsafe {
-                std::ptr::copy(start as *const u64, new_start as *mut u64, words);
+                std::ptr::copy(*start as *const u64, *new_start as *mut u64, *words);
             }
             let h = self.heap.header(*new_obj);
             let mut bits = h.gc_bits() & !(GC_BIT_MARK | GC_BIT_REMEMBERED);
@@ -404,6 +447,7 @@ impl Vm {
             );
         }
         self.counters.compact_ns += pause_start.elapsed().as_nanos() as u64;
+        self.jit_sync_globals();
         Ok(())
     }
 

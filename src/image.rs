@@ -63,7 +63,7 @@ impl Vm {
 
         let mut out = Vec::with_capacity(IMG_HEADER_SIZE + size);
         put_u32(&mut out, IMG_MAGIC);
-        put_u32(&mut out, 1); // version
+        put_u32(&mut out, IMG_VERSION);
         put_u64(&mut out, 0); // flags
         put_u64(&mut out, base as u64);
         put_u64(&mut out, size as u64);
@@ -88,7 +88,7 @@ impl Vm {
         if data.len() < IMG_HEADER_SIZE || get_u32(&data, IMG_MAGIC_OFFSET) != IMG_MAGIC {
             return Err(VmError::Fatal("not a STIM image".into()));
         }
-        if get_u32(&data, IMG_VERSION_OFFSET) != 1 {
+        if get_u32(&data, IMG_VERSION_OFFSET) != IMG_VERSION {
             return Err(VmError::Fatal("unsupported image version".into()));
         }
         let saved_base = get_u64(&data, IMG_SAVED_BASE_OFFSET) as usize;
@@ -142,6 +142,14 @@ impl Vm {
                     if sites.is_ptr() && heap.header(sites.as_ptr()).format() == FMT_PTRS {
                         site_registry.push(sites);
                     }
+                    // Images are tier-free (JIT Invariant J7): reset the
+                    // VM-transient vmState slot on every method and block.
+                    let vs = if h.class_index() == CLASS_COMPILEDMETHOD {
+                        METHOD_VMSTATE
+                    } else {
+                        BLOCK_VMSTATE
+                    };
+                    heap.set_slot_raw(obj, vs, Value::from_int(0));
                 }
                 CLASS_SYMBOL => {
                     symbols.push((heap.bytes(obj).to_vec(), Value::from_ptr(obj)));
@@ -190,6 +198,7 @@ impl Vm {
             snapshot_fired_at_capture_len: None,
             counters: crate::counters::Counters::new(),
             profiler: crate::profile::Profiler::default(),
+            jit: None,
         })
     }
 }
