@@ -1,6 +1,6 @@
 {
-  "comment": "The Treaty (SPEC.md Appendix A) as canonical machine-readable data. src/treaty.rs mirrors this file; the test suite asserts agreement. On conflict, this JSON wins.",
-  "version": 1,
+  "comment": "The Treaty (SPEC.md Appendix A) as canonical machine-readable data. src/treaty.rs mirrors this file; the test suite asserts agreement. On conflict, this JSON wins. Version 2 adds the JIT Annex (JIT.md Annex J): vmState slots, returnInfo repacking, 6-word send sites, jit/profiler semaphores, and the jit constant group.",
+  "version": 2,
 
   "tags": {
     "TAG_INT_BIT": 1,
@@ -48,8 +48,12 @@
     "FLAG_BLOCKCTX": 4,
     "FLAG_UNWINDCONT": 8,
     "SERIAL_SHIFT": 32,
+    "RETINFO_SITE_SHIFT": 0,
+    "RETINFO_SITE_BITS": 8,
+    "RETINFO_NO_SITE": 255,
+    "RETINFO_DEST_SHIFT": 8,
     "RETINFO_DEST_BITS": 8,
-    "RETINFO_PC_SHIFT": 8
+    "RETINFO_PC_SHIFT": 16
   },
 
   "opcodes": {
@@ -223,7 +227,8 @@
     "METHOD_SELECTOR": 4,
     "METHOD_CLASS": 5,
     "METHOD_SOURCE_INFO": 6,
-    "METHOD_NUM_SLOTS": 7
+    "METHOD_VMSTATE": 7,
+    "METHOD_NUM_SLOTS": 8
   },
 
   "compiled_block_slots": {
@@ -233,7 +238,9 @@
     "BLOCK_SEND_SITES": 3,
     "BLOCK_OUTER_METHOD": 4,
     "BLOCK_INFO": 5,
-    "BLOCK_NUM_SLOTS": 6
+    "BLOCK_PAD": 6,
+    "BLOCK_VMSTATE": 7,
+    "BLOCK_NUM_SLOTS": 8
   },
 
   "method_header": {
@@ -271,7 +278,8 @@
     "SITE_CACHE_CLASS": 2,
     "SITE_CACHE_METHOD": 3,
     "SITE_STATIC_CLASS": 4,
-    "SITE_STRIDE": 5
+    "SITE_COUNTERS": 5,
+    "SITE_STRIDE": 6
   },
 
   "special_objects": {
@@ -288,7 +296,9 @@
     "SPECIAL_TERMINATE_TRAMPOLINE": 10,
     "SPECIAL_LOW_SPACE_SEMAPHORE": 11,
     "SPECIAL_TIMER_SEMAPHORE": 12,
-    "SPECIAL_OBJECTS_COUNT": 13
+    "SPECIAL_JIT_SEMAPHORE": 13,
+    "SPECIAL_PROFILER_SEMAPHORE": 14,
+    "SPECIAL_OBJECTS_COUNT": 15
   },
 
   "primitives": {
@@ -375,10 +385,83 @@
     "PRIM_VM_COUNTERS": 424,
     "PRIM_VM_COUNTERS_RESET": 425,
     "PRIM_PROFILER_GATE": 426,
+    "PRIM_JIT_NEXT_REQUEST": 430,
+    "PRIM_JIT_QUEUE_SIZE": 431,
+    "PRIM_JIT_INSTALL": 432,
+    "PRIM_JIT_CONTROL": 433,
+    "PRIM_JIT_READ_SAMPLES": 434,
+    "PRIM_JIT_CODE_INFO": 435,
     "PRIM_TABLE_SIZE": 4096
   },
 
+  "jit": {
+    "VMSTATE_COUNTER_SHIFT": 0,
+    "VMSTATE_COUNTER_BITS": 20,
+    "VMSTATE_QUEUED_SHIFT": 20,
+    "VMSTATE_COMPILED_SHIFT": 21,
+    "VMSTATE_DNC_SHIFT": 22,
+    "VMSTATE_HANDLE_SHIFT": 24,
+    "VMSTATE_HANDLE_BITS": 24,
+    "DISP_CONTINUE": 0,
+    "DISP_EXIT": 1,
+    "DISP_HALT": 2,
+    "DISP_ERROR": 3,
+    "LNK_SEND_MISS": 0,
+    "LNK_SEND_SLOW": 1,
+    "LNK_ALLOC": 2,
+    "LNK_BARRIER_REMEMBER": 3,
+    "LNK_STACK_GROW": 4,
+    "LNK_SAFEPOINT": 5,
+    "LNK_NLR": 6,
+    "LNK_PRIM_CALL": 7,
+    "LNK_MUST_BE_BOOLEAN": 8,
+    "LNK_CALL_INTERP": 9,
+    "LNK_EXIT": 10,
+    "LNK_RESUME": 11,
+    "LNK_COUNT": 16,
+    "GBL_VM": 0,
+    "GBL_ACTIVE_PROCESS": 8,
+    "GBL_SAFEPOINT_PTR": 16,
+    "GBL_YOUNG_BASE": 24,
+    "GBL_YOUNG_LIMIT": 32,
+    "GBL_EXIT_SP": 40,
+    "GBL_HALT_VALUE": 48,
+    "GBL_NIL": 56,
+    "GBL_TRUE": 64,
+    "GBL_FALSE": 72,
+    "GBL_HANDLES": 80,
+    "GBL_LNK": 88,
+    "GBL_CLASS_TABLE": 96,
+    "GBL_SIZE": 128,
+    "JIT_HANDLE_ENTRY_BYTES": 16,
+    "JITCTL_GET_THRESHOLD": 0,
+    "JITCTL_SET_THRESHOLD": 1,
+    "JITCTL_GET_ENABLED": 2,
+    "JITCTL_SET_ENABLED": 3,
+    "JITCTL_FLUSH_ALL": 4,
+    "JITCTL_GET_PROFILING_LEVEL": 5,
+    "JITCTL_SET_PROFILING_LEVEL": 6,
+    "JITCTL_SET_SAMPLING": 7,
+    "JITCTL_GET_SEMAPHORE": 8,
+    "JITCTL_MARK_DNC": 9,
+    "JIT_AMD64_FP": 3,
+    "JIT_AMD64_LNK": 13,
+    "JIT_AMD64_GBL": 14,
+    "JIT_AMD64_RESERVED": 12,
+    "JIT_ARM64_FP": 19,
+    "JIT_ARM64_LNK": 20,
+    "JIT_ARM64_GBL": 21,
+    "JIT_ARM64_RESERVED": 22,
+    "JIT_PATCH_CLASS": 0,
+    "JIT_PATCH_TARGET": 1,
+    "JIT_RETPOINT_NONE": 4294967295,
+    "JIT_TIER_THRESHOLD_DEFAULT": 100,
+    "JIT_QUEUE_CAPACITY": 65536,
+    "JIT_CACHE_BYTES_DEFAULT": 67108864
+  },
+
   "image_header": {
+    "IMG_VERSION": 2,
     "IMG_MAGIC_OFFSET": 0,
     "IMG_VERSION_OFFSET": 4,
     "IMG_FLAGS_OFFSET": 8,

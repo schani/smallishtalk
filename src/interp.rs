@@ -30,6 +30,10 @@ pub struct Regs {
     pub closure_reg: Option<u8>,
     /// Set when the base frame returns: the process's final value.
     pub halted: Option<Value>,
+    /// Set after a process switch: the loop tail should try a native
+    /// re-entry for the (new) current frame (JIT.md §9 — hot loops
+    /// preempted by the timer resume in native code, not the interpreter).
+    pub resume_native: bool,
 }
 
 pub enum PrimOutcome {
@@ -66,6 +70,7 @@ impl Vm {
             epoch: self.gc_epoch,
             closure_reg: None,
             halted: None,
+            resume_native: false,
         };
         self.reload_code(&mut regs);
         regs
@@ -142,9 +147,35 @@ impl Vm {
         self.save_regs(regs);
         self.collect_old()?;
         self.refresh_regs(regs);
-        attempt(&mut self.heap)
+        if let Some(a) = attempt(&mut self.heap) {
+            return Ok(Value::from_ptr(a));
+        }
+        // Young space cannot fit the request even when empty of garbage
+        // (tiny stress-mode nurseries with a large live set): tenure at
+        // birth rather than dying.
+        self.alloc_old_fallback(class, format, n)
             .map(Value::from_ptr)
             .ok_or(VmError::OutOfMemory)
+    }
+
+    /// Last-resort allocation directly in old space, marked remembered at
+    /// birth: callers of the young allocators (templates included) store
+    /// initial values without a write barrier on the assumption the
+    /// object is young — pre-remembering keeps that sound.
+    pub(crate) fn alloc_old_fallback(&mut self, class: u32, format: u64, n: usize) -> Option<usize> {
+        let nil = self.nil();
+        let addr = match format {
+            FMT_FIXED => self.heap.alloc_fixed_old(class, n, nil),
+            FMT_PTRS => self.heap.alloc_ptrs_old(class, n, nil),
+            _ => self.heap.alloc_bytes_old(class, n),
+        }?;
+        if format == FMT_FIXED || format == FMT_PTRS {
+            let h = self.heap.header(addr);
+            self.heap
+                .set_header(addr, h.with_gc_bits(h.gc_bits() | GC_BIT_REMEMBERED));
+            self.heap.ssb.push(addr);
+        }
+        Some(addr)
     }
 
     // --- The run loop ---
@@ -152,13 +183,28 @@ impl Vm {
     /// The context switch (§13): store pc/frameOffset into the outgoing
     /// process, remember its (possibly old) stack, load the target's state.
     pub fn transfer_to(&mut self, regs: &mut Regs, target: Value) {
+        let nil = self.nil();
+        let cur = self.active_process;
+        if cur.is_ptr() && cur != nil && self.heap.slot(cur.as_ptr(), PROCESS_STACK) != nil {
+            self.save_regs(regs);
+        }
+        self.transfer_raw(target);
+        *regs = self.load_regs();
+        // The new process may be resumable in native code; the loop tail
+        // checks before the next dispatch.
+        regs.resume_native = self.jit.is_some();
+    }
+
+    /// Regs-free half of the switch, also used by JIT stubs (whose caller
+    /// has already made Process.{frameOffset,pc} current — §4's resume
+    /// contract). Never re-enters native code itself (J5).
+    pub fn transfer_raw(&mut self, target: Value) {
         self.counters.process_switches += 1;
         let nil = self.nil();
         let cur = self.active_process;
         if cur.is_ptr() && cur != nil {
             let stack = self.heap.slot(cur.as_ptr(), PROCESS_STACK);
             if stack != nil {
-                self.save_regs(regs);
                 // While running, stores into this stack were barrier-exempt;
                 // once it stops being the running stack it must be in the
                 // remembered set if it lives in old space.
@@ -176,7 +222,7 @@ impl Vm {
         let sched = self.specials()[SPECIAL_PROCESSOR];
         self.store_slot(sched.as_ptr(), SCHEDULER_ACTIVE_PROCESS, target);
         self.active_process = target;
-        *regs = self.load_regs();
+        self.jit_sync_globals();
     }
 
     /// Run the given process until its base frame returns. Other processes
@@ -196,8 +242,58 @@ impl Vm {
         self.active_process = process;
         let sched = self.specials()[SPECIAL_PROCESSOR];
         self.store_slot(sched.as_ptr(), SCHEDULER_ACTIVE_PROCESS, process);
+        self.jit_sync_globals();
         let mut regs = self.load_regs();
+        regs.resume_native = self.jit.is_some();
+        #[cfg(debug_assertions)]
+        let mut last_op: u8 = 0xFF;
         loop {
+            // Top-of-loop chain: process termination and native (re-)entry
+            // run before the next fetch, so a switched-to or freshly
+            // started process resumes in native code without interpreting
+            // a single instruction first (JIT.md §9).
+            loop {
+                if let Some(v) = regs.halted.take() {
+                    // The active process's base frame returned: it
+                    // terminates (§7: terminated = stack is nil).
+                    let nil = self.nil();
+                    let cur = self.active_process;
+                    self.store_slot(cur.as_ptr(), PROCESS_STACK, nil);
+                    self.heap.set_slot_raw(cur.as_ptr(), PROCESS_MY_LIST, nil);
+                    if cur == self.temp_roots[target_slot] {
+                        return Ok(v);
+                    }
+                    let next = self.pick_next_or_wait()?;
+                    self.transfer_to(&mut regs, next);
+                    continue;
+                }
+                if regs.resume_native {
+                    regs.resume_native = false;
+                    if let Some(addr) = self.native_resume_addr(&regs) {
+                        self.enter_native(&mut regs, addr)?;
+                        continue;
+                    }
+                }
+                break;
+            }
+            #[cfg(debug_assertions)]
+            {
+                let true_code = self
+                    .heap
+                    .slot(regs.method.as_ptr(), METHOD_BYTECODES)
+                    .as_ptr();
+                assert!(
+                    regs.epoch == self.gc_epoch && regs.code == true_code,
+                    "stale regs at fetch: epoch {} vs {}, code {:#x} vs {:#x}, \
+                     pc {} frame {} last_op {last_op:#x}",
+                    regs.epoch,
+                    self.gc_epoch,
+                    regs.code,
+                    true_code,
+                    regs.pc,
+                    regs.frame,
+                );
+            }
             let word = self.heap.insn_at(regs.code, regs.pc);
             regs.pc += 1;
             let op = (word & 0xFF) as u8;
@@ -291,7 +387,18 @@ impl Vm {
                     let off = d16 as i16 as isize;
                     regs.pc = (regs.pc as isize + off) as usize;
                     if off < 0 {
-                        self.poll_safepoint(&mut regs)?;
+                        if self.poll_safepoint(&mut regs)? {
+                            continue;
+                        }
+                        // Back-edge re-entry (JIT.md §9): an interpreted
+                        // pass over a compiled loop (after an exit
+                        // fallback) climbs back into native code at the
+                        // loop head instead of staying de-tiered.
+                        if self.jit.is_some() {
+                            if let Some(addr) = self.native_resume_addr(&regs) {
+                                self.enter_native(&mut regs, addr)?;
+                            }
+                        }
                     }
                 }
                 OP_JUMPTRUE | OP_JUMPFALSE => {
@@ -302,7 +409,14 @@ impl Vm {
                         let off = d16 as i16 as isize;
                         regs.pc = (regs.pc as isize + off) as usize;
                         if off < 0 {
-                            self.poll_safepoint(&mut regs)?;
+                            if self.poll_safepoint(&mut regs)? {
+                                continue;
+                            }
+                            if self.jit.is_some() {
+                                if let Some(addr) = self.native_resume_addr(&regs) {
+                                    self.enter_native(&mut regs, addr)?;
+                                }
+                            }
                         }
                     } else if v != other {
                         // mustBeBoolean: send it, result replaces slot a,
@@ -328,7 +442,7 @@ impl Vm {
                 OP_PRIM => {
                     let method = regs.method;
                     let argc = self.method_argc(method);
-                    match self.run_primitive(d16, &mut regs, 0, argc, 0)? {
+                    match self.run_primitive(d16, &mut regs, 0, argc, 0, RETINFO_NO_SITE as u8)? {
                         PrimOutcome::Value(v) => {
                             self.do_return(&mut regs, v)?;
                         }
@@ -341,7 +455,15 @@ impl Vm {
 
                 // --- Sends ---
                 OP_SEND | OP_SENDSUPER => {
-                    self.poll_safepoint(&mut regs)?;
+                    // Poll with pc AT the send: a preemption must park
+                    // this process to re-execute the send on resume, and
+                    // the switched-to process must not run this arm's
+                    // stale decode — restart the dispatch instead.
+                    regs.pc -= 1;
+                    if self.poll_safepoint(&mut regs)? {
+                        continue;
+                    }
+                    regs.pc += 1;
                     if self.snapshot_after_sends.is_some() {
                         self.sends_seen += 1;
                         if let Some((n, path)) = self.snapshot_after_sends.clone() {
@@ -359,6 +481,41 @@ impl Vm {
                         return fatal("SEND without send-site table");
                     }
                     let base = c as usize * SITE_STRIDE;
+                    #[cfg(debug_assertions)]
+                    if (base + SITE_STRIDE) as u64 > self.heap.num_slots(regs.sites) {
+                        let m = regs.method.as_ptr();
+                        let bc = self.heap.slot(m, METHOD_BYTECODES);
+                        let n = self.heap.byte_size(bc.as_ptr()) / 4;
+                        let mut listing = String::new();
+                        for i in 0..n {
+                            let w = self.heap.insn_at(regs.code, i);
+                            match crate::asm::Insn::decode(w) {
+                                Some(insn) => listing.push_str(&format!("  {i}: {insn}\n")),
+                                None => listing.push_str(&format!("  {i}: raw {w:#010x}\n")),
+                            }
+                        }
+                        let nsites = self.heap.num_slots(regs.sites) as usize / SITE_STRIDE;
+                        for s in 0..nsites {
+                            let sel = self.heap.slot(regs.sites, s * SITE_STRIDE + SITE_SELECTOR);
+                            if sel.is_ptr() {
+                                listing.push_str(&format!(
+                                    "  site {s}: #{}\n",
+                                    String::from_utf8_lossy(self.heap.bytes(sel.as_ptr()))
+                                ));
+                            }
+                        }
+                        panic!(
+                            "SEND site {} out of table at pc {} frame {} method {:#x} \
+                             (class {}) process {:#x}\n{}",
+                            c,
+                            regs.pc - 1,
+                            regs.frame,
+                            m,
+                            self.heap.header(m).class_index(),
+                            self.active_process.raw(),
+                            listing,
+                        );
+                    }
                     let selector = self.heap.slot(regs.sites, base + SITE_SELECTOR);
                     let argc = self.heap.slot(regs.sites, base + SITE_ARGC).as_int() as usize;
                     let super_static = if op == OP_SENDSUPER {
@@ -366,7 +523,7 @@ impl Vm {
                     } else {
                         None
                     };
-                    self.do_send(&mut regs, a, b, selector, argc, Some(base), super_static)?;
+                    self.do_send(&mut regs, a, b, selector, argc, Some(base), super_static, c)?;
                 }
 
                 // --- Closures ---
@@ -511,19 +668,9 @@ impl Vm {
             if op != OP_MKCLOSURE {
                 regs.closure_reg = if op == OP_CAPTURE { regs.closure_reg } else { None };
             }
-            if let Some(v) = regs.halted {
-                // The active process's base frame returned: it terminates
-                // (§7: terminated = stack is nil).
-                let nil = self.nil();
-                let cur = self.active_process;
-                self.store_slot(cur.as_ptr(), PROCESS_STACK, nil);
-                self.heap.set_slot_raw(cur.as_ptr(), PROCESS_MY_LIST, nil);
-                if cur == self.temp_roots[target_slot] {
-                    return Ok(v);
-                }
-                let next = self.pick_next_or_wait()?;
-                self.transfer_to(&mut regs, next);
-                regs.halted = None;
+            #[cfg(debug_assertions)]
+            {
+                last_op = op;
             }
         }
     }
@@ -614,7 +761,7 @@ impl Vm {
 
     /// Stage values (receiver first) contiguously above the current frame's
     /// slots and dispatch as an ordinary send.
-    fn send_staged(
+    pub(crate) fn send_staged(
         &mut self,
         regs: &mut Regs,
         dest: u8,
@@ -645,13 +792,17 @@ impl Vm {
             recv_and_args.len() - 1,
             None,
             None,
+            RETINFO_NO_SITE as u8,
         )
     }
 
     // --- Sends ---
 
     /// The full send: lookup (through caches when a site is given),
-    /// primitive check, activation, DNU.
+    /// primitive check, activation, DNU. `site` is the send-site index for
+    /// the callee frame's returnInfo (RETINFO_NO_SITE when the send has no
+    /// site: staged specialized-send fallbacks, perform-style re-dispatch).
+    #[allow(clippy::too_many_arguments)]
     pub fn do_send(
         &mut self,
         regs: &mut Regs,
@@ -661,6 +812,7 @@ impl Vm {
         argc: usize,
         site_base: Option<usize>,
         super_static: Option<Value>,
+        site: u8,
     ) -> Result<(), VmError> {
         let receiver = self.get(regs, r);
         let class_index = self.class_index_of(receiver);
@@ -676,9 +828,11 @@ impl Vm {
             let cached = self.heap.slot(regs.sites, base + SITE_CACHE_CLASS).as_int();
             if cached == class_index as i64 {
                 let method = self.heap.slot(regs.sites, base + SITE_CACHE_METHOD);
-                return self.activate(regs, method, r, dest, argc);
+                self.bump_site_counter(regs.sites, base, false);
+                return self.activate(regs, method, r, dest, argc, site);
             }
             self.counters.inline_cache_miss += 1;
+            self.bump_site_counter(regs.sites, base, true);
         }
 
         let looked_up = match super_static {
@@ -689,16 +843,41 @@ impl Vm {
         match looked_up {
             Some(method) => {
                 if let Some(base) = site_base {
-                    // Refill the inline cache.
+                    // Refill the inline cache — heap entry and compiled
+                    // site together, at VM-time (§8, J6).
                     let sites = regs.sites;
                     self.heap
                         .set_slot_raw(sites, base + SITE_CACHE_CLASS, Value::from_int(class_index as i64));
                     self.store_slot(sites, base + SITE_CACHE_METHOD, method);
+                    if self.jit.is_some() {
+                        self.jit_patch_send_site(regs.method, site, class_index, method);
+                    }
                 }
-                self.activate(regs, method, r, dest, argc)
+                self.activate(regs, method, r, dest, argc, site)
             }
-            None => self.does_not_understand(regs, dest, r, selector, argc),
+            None => self.does_not_understand(regs, dest, r, selector, argc, site),
         }
+    }
+
+    /// Per-site hit/miss statistics (JIT.md §16): the SITE_COUNTERS word
+    /// packs saturating hits in bits 0..31 and misses in bits 31..62.
+    /// Misses (and interpreter hits) are counted here; compiled-code hits
+    /// are template increments at profiling level >= 1.
+    pub(crate) fn bump_site_counter(&mut self, sites: usize, base: usize, miss: bool) {
+        let v = self.heap.slot(sites, base + SITE_COUNTERS);
+        if !v.is_int() {
+            return;
+        }
+        let v = v.as_int();
+        let (hits, misses) = (v & 0x7FFF_FFFF, (v >> 31) & 0x7FFF_FFFF);
+        let nv = if miss {
+            if misses >= 0x7FFF_FFFF { return; }
+            hits | (misses + 1) << 31
+        } else {
+            if hits >= 0x7FFF_FFFF { return; }
+            (hits + 1) | misses << 31
+        };
+        self.heap.set_slot_raw(sites, base + SITE_COUNTERS, Value::from_int(nv));
     }
 
     /// Global lookup cache in front of the dictionary walk (§8 step 3-4).
@@ -730,6 +909,7 @@ impl Vm {
         r: u8,
         selector: Value,
         argc: usize,
+        site: u8,
     ) -> Result<(), VmError> {
         self.counters.dnu += 1;
         // Build the Message object (allocated on this slow path only).
@@ -762,7 +942,7 @@ impl Vm {
             ));
         };
         self.put(regs, r + 1, msg);
-        self.activate(regs, method, r, dest, 1)
+        self.activate(regs, method, r, dest, 1, site)
     }
 
     /// Activation (§8): run the primitive if the method has one, else (or on
@@ -774,24 +954,36 @@ impl Vm {
         r: u8,
         dest: u8,
         argc: usize,
+        site: u8,
     ) -> Result<(), VmError> {
+        // Tiering (JIT.md §3): every activation counts; the trip queues.
+        self.bump_invocation(method);
         if let Some(n) = self.method_primitive(method) {
-            match self.run_primitive(n, regs, r, argc, dest)? {
+            match self.run_primitive(n, regs, r, argc, dest, site)? {
                 PrimOutcome::Value(v) => {
                     self.put(regs, dest, v);
+                    // A successful primitive send completes like a return:
+                    // a compiled caller resumes at the send continuation.
+                    if self.jit.is_some() {
+                        if let Some(addr) = self.native_return_addr(regs.method, site) {
+                            return self.enter_native(regs, addr);
+                        }
+                    }
                     return Ok(());
                 }
                 PrimOutcome::Control => return Ok(()),
                 PrimOutcome::Fail(code) => {
-                    return self.push_frame(regs, method, r, dest, argc, Some(code), 0);
+                    return self.push_frame(regs, method, r, dest, argc, Some(code), 0, site);
                 }
             }
         }
-        self.push_frame(regs, method, r, dest, argc, None, 0)
+        self.push_frame(regs, method, r, dest, argc, None, 0, site)
     }
 
     /// Push a frame for `method` whose receiver already sits at bytecode
     /// slot `r` of the current frame (overlapping calling convention, §7).
+    /// `site` lands in the returnInfo site field (RETINFO_NO_SITE = none).
+    #[allow(clippy::too_many_arguments)]
     pub fn push_frame(
         &mut self,
         regs: &mut Regs,
@@ -801,6 +993,7 @@ impl Vm {
         argc: usize,
         prim_fail: Option<i64>,
         extra_flags: u64,
+        site: u8,
     ) -> Result<(), VmError> {
         debug_assert!(r as usize >= FRAME_RECEIVER, "send staged below slot 4");
         let fs = self.method_frame_slots(method);
@@ -825,7 +1018,11 @@ impl Vm {
         self.heap.set_slot_raw(
             st,
             new_off + FRAME_RETINFO,
-            Value::from_int((dest as i64) | ((regs.pc as i64) << RETINFO_PC_SHIFT)),
+            Value::from_int(
+                (site as i64)
+                    | ((dest as i64) << RETINFO_DEST_SHIFT)
+                    | ((regs.pc as i64) << RETINFO_PC_SHIFT),
+            ),
         );
         self.heap.set_slot_raw(st, new_off + FRAME_METHOD, method);
         self.heap.set_slot_raw(
@@ -851,10 +1048,24 @@ impl Vm {
         } else {
             regs.pc = 0;
         }
+        // Loop -> native (JIT.md §4): a freshly pushed frame whose method
+        // has live code enters at the method entry (or, after a prim
+        // failure, at the mapped post-PRIM point). Callers do nothing
+        // with regs after push_frame, so entering here is the one edge
+        // that covers sends, block activation, and DNU. Unwind-
+        // continuation frames are excluded: their *return* resumes the
+        // pending unwind, a protocol only the interpreter implements.
+        if self.jit.is_some() && extra_flags & FLAG_UNWINDCONT == 0 {
+            if let Some(addr) = self.native_resume_addr(regs) {
+                self.counters.jit_act_native += 1;
+                return self.enter_native(regs, addr);
+            }
+            self.counters.jit_act_interp += 1;
+        }
         Ok(())
     }
 
-    fn bump_serial(&mut self) -> u32 {
+    pub(crate) fn bump_serial(&mut self) -> u32 {
         let p = self.active_process.as_ptr();
         let cur = self.heap.slot(p, PROCESS_SERIAL_COUNTER).as_int() as u32;
         // Serials live in bits 32.. of a 63-bit SmallInteger, so wrap at
@@ -867,6 +1078,18 @@ impl Vm {
 
     /// Sets regs.halted when the base frame returns (process finished).
     pub fn do_return(&mut self, regs: &mut Regs, value: Value) -> Result<(), VmError> {
+        self.do_return_core(regs, value, true)
+    }
+
+    /// The return without the native re-entry edge: suspending primitives
+    /// retire their activation with this (JIT.md §10) — the process must
+    /// *not* continue executing before it blocks.
+    pub(crate) fn do_return_core(
+        &mut self,
+        regs: &mut Regs,
+        value: Value,
+        may_enter: bool,
+    ) -> Result<(), VmError> {
         let flags = self.heap.slot(regs.stack, regs.frame + FRAME_FLAGS).as_int();
         if flags & (FLAG_UNWINDCONT as i64) != 0 {
             return self.continue_unwind_after_ensure(regs, value);
@@ -883,12 +1106,30 @@ impl Vm {
             .heap
             .slot(regs.stack, regs.frame + FRAME_RETINFO)
             .as_int();
-        let dest = (ri & ((1 << RETINFO_DEST_BITS) - 1)) as u8;
+        let dest = ((ri >> RETINFO_DEST_SHIFT) & ((1 << RETINFO_DEST_BITS) - 1)) as u8;
         self.nil_frame(regs);
         regs.pc = (ri >> RETINFO_PC_SHIFT) as usize;
         regs.frame = caller as usize;
         self.reload_code(regs);
         self.put(regs, dest, value);
+        // Loop -> native (JIT.md §4): returning into a compiled frame
+        // re-enters at the recorded send continuation (O(1) via the
+        // returnInfo site index and the handle's returnPoints).
+        if may_enter && self.jit.is_some() {
+            let site = (ri & ((1 << RETINFO_SITE_BITS) - 1)) as u8;
+            if let Some(addr) = self.native_return_addr(regs.method, site) {
+                return self.enter_native(regs, addr);
+            }
+            // No site (staged specialized-send fallbacks): the resume pc
+            // may still be a mapped re-entry point — the compiler maps
+            // every specialized send's continuation precisely so these
+            // returns climb straight back into native code.
+            if site as u64 == RETINFO_NO_SITE {
+                if let Some(addr) = self.native_resume_addr(regs) {
+                    return self.enter_native(regs, addr);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -948,7 +1189,10 @@ impl Vm {
 
     // --- Safepoints (§13) ---
 
-    pub fn poll_safepoint(&mut self, regs: &mut Regs) -> Result<(), VmError> {
+    /// Answers true when the safepoint switched processes (regs then
+    /// belong to the *new* process; the caller must not continue with
+    /// state decoded for the old one).
+    pub fn poll_safepoint(&mut self, regs: &mut Regs) -> Result<bool, VmError> {
         #[cfg(feature = "vm-counters")]
         if self.counters.gate {
             self.counters.record_gap();
@@ -956,15 +1200,18 @@ impl Vm {
         // Stress/test mode: a sample at *every* poll (walkability contract
         // enforcement, plan §2). Never set in production.
         if self.profiler.sample_every_poll && self.profiler.active {
+            self.counters.jit_samples_interp += 1;
             self.save_regs(regs);
             self.take_sample(regs.stack, regs.frame, None);
         }
         if self.safepoint.armed.load(std::sync::atomic::Ordering::Relaxed) {
+            let before = self.active_process;
             self.save_regs(regs);
             self.service_safepoint(regs)?;
             self.refresh_regs(regs);
+            return Ok(before != self.active_process);
         }
-        Ok(())
+        Ok(false)
     }
 
     /// Timer expiry, profiler samples, and preemption checks (§13). The
@@ -973,12 +1220,13 @@ impl Vm {
     fn service_safepoint(&mut self, regs: &mut Regs) -> Result<(), VmError> {
         use std::sync::atomic::Ordering;
         if self.safepoint.sample_due.swap(false, Ordering::Relaxed) && self.profiler.active {
+            self.counters.jit_samples_interp += 1;
             self.take_sample(regs.stack, regs.frame, None);
         }
         self.service_timers();
-        self.safepoint
-            .armed
-            .store(!self.timer_requests.is_empty(), Ordering::Relaxed);
+        let keep_armed = !self.timer_requests.is_empty()
+            || (self.profiler.active && self.profiler.sample_every_poll);
+        self.safepoint.armed.store(keep_armed, Ordering::Relaxed);
         let cur = self.active_process;
         let cur_prio = self.heap.slot(cur.as_ptr(), PROCESS_PRIORITY).as_int();
         if let Some(hp) = self.runnable_priority_ceiling() {
@@ -1048,7 +1296,7 @@ impl Vm {
 
     // --- Non-local return (§10) ---
 
-    fn do_nlr(&mut self, regs: &mut Regs, a: u8) -> Result<(), VmError> {
+    pub(crate) fn do_nlr(&mut self, regs: &mut Regs, a: u8) -> Result<(), VmError> {
         self.counters.nlrs += 1;
         let value = self.get(regs, a);
         let closure = self.get(regs, 0); // block activation receiver
@@ -1086,7 +1334,7 @@ impl Vm {
                 .heap
                 .slot(regs.stack, regs.frame + FRAME_RETINFO)
                 .as_int();
-            let dest = (ri & ((1 << RETINFO_DEST_BITS) - 1)) as u8;
+            let dest = ((ri >> RETINFO_DEST_SHIFT) & ((1 << RETINFO_DEST_BITS) - 1)) as u8;
             self.nil_frame(regs);
             regs.frame = caller as usize;
             regs.pc = (ri >> RETINFO_PC_SHIFT) as usize;
@@ -1199,6 +1447,7 @@ impl Vm {
             0,
             None,
             FLAG_BLOCKCTX | FLAG_UNWINDCONT,
+            RETINFO_NO_SITE as u8,
         )
     }
 
@@ -1258,7 +1507,14 @@ impl Vm {
     pub fn run_until_idle(&mut self, process: Value) -> Result<(), VmError> {
         let mut current = process;
         loop {
-            self.run(current)?;
+            match self.run(current) {
+                Ok(_) => {}
+                // A process blocked forever (e.g. the background JIT
+                // process parked on jitSemaphore) with nothing else to
+                // run: the system is idle, not broken.
+                Err(VmError::Deadlock) => return Ok(()),
+                Err(e) => return Err(e),
+            }
             match self.take_next_runnable() {
                 Some(next) => current = next,
                 None => {

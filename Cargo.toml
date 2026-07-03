@@ -29,3 +29,6 @@ vm-counters = []
 debug = "line-tables-only"
 
 [dependencies]
+# The JIT code cache (mmap/mprotect W^X): the only external dependency of
+# the VM proper.
+libc = "0.2"

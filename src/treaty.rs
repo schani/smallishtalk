@@ -49,9 +49,16 @@ pub const FLAG_BLOCKCTX: u64 = 4;
 /// stored in the caller (ensure) frame's reserved slots.
 pub const FLAG_UNWINDCONT: u64 = 8;
 pub const SERIAL_SHIFT: u32 = 32;
-// returnInfo (frame slot 1) packing: dest slot in low 8 bits, resume pc above.
+// returnInfo (frame slot 1) packing, Treaty v2 (JIT Annex J.1):
+// send-site index in bits 0..8 (255 = no site), dest slot in bits 8..16,
+// resume pc in bits 16.. — the site index buys compiled code O(1)
+// same-tier returns via the handle's returnPoints array.
+pub const RETINFO_SITE_SHIFT: u32 = 0;
+pub const RETINFO_SITE_BITS: u32 = 8;
+pub const RETINFO_NO_SITE: u64 = 255;
+pub const RETINFO_DEST_SHIFT: u32 = 8;
 pub const RETINFO_DEST_BITS: u32 = 8;
-pub const RETINFO_PC_SHIFT: u32 = 8;
+pub const RETINFO_PC_SHIFT: u32 = 16;
 
 // --- Opcodes (A.2) ---
 pub const OP_NOP: u8 = 0x00;
@@ -219,7 +226,11 @@ pub const METHOD_SEND_SITES: usize = 3;
 pub const METHOD_SELECTOR: usize = 4;
 pub const METHOD_CLASS: usize = 5;
 pub const METHOD_SOURCE_INFO: usize = 6;
-pub const METHOD_NUM_SLOTS: usize = 7;
+/// VM-transient tier state (JIT Annex J.1): invocation counter + flags +
+/// code-handle index, packed per the VMSTATE_* constants. Always a
+/// SmallInteger; reset to 0 by the image loader (images are tier-free).
+pub const METHOD_VMSTATE: usize = 7;
+pub const METHOD_NUM_SLOTS: usize = 8;
 
 pub const BLOCK_HEADER: usize = 0;
 pub const BLOCK_BYTECODES: usize = 1;
@@ -227,7 +238,12 @@ pub const BLOCK_LITERALS: usize = 2;
 pub const BLOCK_SEND_SITES: usize = 3;
 pub const BLOCK_OUTER_METHOD: usize = 4;
 pub const BLOCK_INFO: usize = 5;
-pub const BLOCK_NUM_SLOTS: usize = 6;
+/// Reserved (always SmallInteger 0) so that vmState sits at the same slot
+/// index in CompiledMethod and CompiledBlock — the return template and the
+/// resume mapper read `method slot 7` without a class check.
+pub const BLOCK_PAD: usize = 6;
+pub const BLOCK_VMSTATE: usize = 7;
+pub const BLOCK_NUM_SLOTS: usize = 8;
 
 // --- Method header packing (§9) ---
 pub const MH_FRAME_SLOTS_SHIFT: u32 = 0;
@@ -261,7 +277,10 @@ pub const SITE_ARGC: usize = 1;
 pub const SITE_CACHE_CLASS: usize = 2;
 pub const SITE_CACHE_METHOD: usize = 3;
 pub const SITE_STATIC_CLASS: usize = 4;
-pub const SITE_STRIDE: usize = 5;
+/// Saturating hit/miss counters, packed hits in the low half (JIT Annex
+/// J.1, profiling). Always a SmallInteger, initialized to 0.
+pub const SITE_COUNTERS: usize = 5;
+pub const SITE_STRIDE: usize = 6;
 
 // --- Special objects array (A.4) ---
 pub const SPECIAL_NIL: usize = 0;
@@ -277,7 +296,9 @@ pub const SPECIAL_SEL_MUST_BE_BOOLEAN: usize = 9;
 pub const SPECIAL_TERMINATE_TRAMPOLINE: usize = 10;
 pub const SPECIAL_LOW_SPACE_SEMAPHORE: usize = 11;
 pub const SPECIAL_TIMER_SEMAPHORE: usize = 12;
-pub const SPECIAL_OBJECTS_COUNT: usize = 13;
+pub const SPECIAL_JIT_SEMAPHORE: usize = 13;
+pub const SPECIAL_PROFILER_SEMAPHORE: usize = 14;
+pub const SPECIAL_OBJECTS_COUNT: usize = 15;
 
 // --- Primitive numbers (A.3) ---
 pub const PRIM_CLASS: u16 = 1;
@@ -367,9 +388,116 @@ pub const PRIM_PROFILER_TREE: u16 = 423;
 pub const PRIM_VM_COUNTERS: u16 = 424;
 pub const PRIM_VM_COUNTERS_RESET: u16 = 425;
 pub const PRIM_PROFILER_GATE: u16 = 426;
+/// JIT band 430–439 (JIT Annex J.6).
+pub const PRIM_JIT_NEXT_REQUEST: u16 = 430;
+pub const PRIM_JIT_QUEUE_SIZE: u16 = 431;
+pub const PRIM_JIT_INSTALL: u16 = 432;
+pub const PRIM_JIT_CONTROL: u16 = 433;
+pub const PRIM_JIT_READ_SAMPLES: u16 = 434;
+pub const PRIM_JIT_CODE_INFO: u16 = 435;
 pub const PRIM_TABLE_SIZE: usize = 4096;
 
+// --- JIT Annex (JIT.md Annex J.1–J.6) ---
+
+// vmState packing (a SmallInteger in METHOD_VMSTATE / BLOCK_VMSTATE):
+// saturating invocation counter, queued / compiled / do-not-compile flag
+// bits, and (code handle index + 1) — 0 meaning "no code".
+pub const VMSTATE_COUNTER_SHIFT: u32 = 0;
+pub const VMSTATE_COUNTER_BITS: u32 = 20;
+pub const VMSTATE_QUEUED_SHIFT: u32 = 20;
+pub const VMSTATE_COMPILED_SHIFT: u32 = 21;
+pub const VMSTATE_DNC_SHIFT: u32 = 22;
+pub const VMSTATE_HANDLE_SHIFT: u32 = 24;
+pub const VMSTATE_HANDLE_BITS: u32 = 24;
+
+// Exit dispositions (Annex J.3): what a stub answers (0 = continue
+// in-line) and what the entry trampoline returns to the loop.
+pub const DISP_CONTINUE: u64 = 0;
+pub const DISP_EXIT: u64 = 1;
+pub const DISP_HALT: u64 = 2;
+pub const DISP_ERROR: u64 = 3;
+
+// Linkage-table indices (Annex J.3). Compiled code reaches every VM
+// service as `call/jmp [LNK + 8*n]`; CALL_INTERP and EXIT are in-cache
+// glue, the rest are extern "C" Rust stubs.
+pub const LNK_SEND_MISS: usize = 0;
+pub const LNK_SEND_SLOW: usize = 1;
+pub const LNK_ALLOC: usize = 2;
+pub const LNK_BARRIER_REMEMBER: usize = 3;
+pub const LNK_STACK_GROW: usize = 4;
+pub const LNK_SAFEPOINT: usize = 5;
+pub const LNK_NLR: usize = 6;
+pub const LNK_PRIM_CALL: usize = 7;
+pub const LNK_MUST_BE_BOOLEAN: usize = 8;
+pub const LNK_CALL_INTERP: usize = 9;
+pub const LNK_EXIT: usize = 10;
+/// RESUME_AT: store the resume pc and answer the native re-entry address
+/// (or DISP_EXIT) — keeps siteless returns inside one trampoline.
+pub const LNK_RESUME: usize = 11;
+pub const LNK_COUNT: usize = 16;
+
+// Byte offsets into the VM globals page (the GBL register's target).
+pub const GBL_VM: usize = 0;
+pub const GBL_ACTIVE_PROCESS: usize = 8;
+pub const GBL_SAFEPOINT_PTR: usize = 16;
+pub const GBL_YOUNG_BASE: usize = 24;
+pub const GBL_YOUNG_LIMIT: usize = 32;
+pub const GBL_EXIT_SP: usize = 40;
+pub const GBL_HALT_VALUE: usize = 48;
+pub const GBL_NIL: usize = 56;
+pub const GBL_TRUE: usize = 64;
+pub const GBL_FALSE: usize = 72;
+/// Pointer to the flat runtime handle table (entries of
+/// JIT_HANDLE_ENTRY_BYTES: code address, returnPoints pointer).
+pub const GBL_HANDLES: usize = 80;
+/// Linkage table base (what the LNK register is loaded from at entry).
+pub const GBL_LNK: usize = 88;
+/// Pointer to the VM's class table (Value per class index) — the CLASSOF
+/// template's lookup base. Entries are heap addresses kept current by GC.
+pub const GBL_CLASS_TABLE: usize = 96;
+pub const GBL_SIZE: usize = 128;
+
+pub const JIT_HANDLE_ENTRY_BYTES: usize = 16;
+
+// primJITControl operation codes (Annex J.6).
+pub const JITCTL_GET_THRESHOLD: i64 = 0;
+pub const JITCTL_SET_THRESHOLD: i64 = 1;
+pub const JITCTL_GET_ENABLED: i64 = 2;
+pub const JITCTL_SET_ENABLED: i64 = 3;
+pub const JITCTL_FLUSH_ALL: i64 = 4;
+pub const JITCTL_GET_PROFILING_LEVEL: i64 = 5;
+pub const JITCTL_SET_PROFILING_LEVEL: i64 = 6;
+pub const JITCTL_SET_SAMPLING: i64 = 7;
+/// Answers the jitSemaphore object (special-cased in the primitive: the
+/// only control op with a non-integer result).
+pub const JITCTL_GET_SEMAPHORE: i64 = 8;
+/// arg = a method/block: set its do-not-compile bit and clear queued
+/// (the JIT process marks methods the compiler refuses).
+pub const JITCTL_MARK_DNC: i64 = 9;
+
+// Dedicated register assignments (Annex J.2), by machine encoding number.
+pub const JIT_AMD64_FP: u32 = 3; // rbx
+pub const JIT_AMD64_LNK: u32 = 13; // r13
+pub const JIT_AMD64_GBL: u32 = 14; // r14
+pub const JIT_AMD64_RESERVED: u32 = 12; // r12
+pub const JIT_ARM64_FP: u32 = 19;
+pub const JIT_ARM64_LNK: u32 = 20;
+pub const JIT_ARM64_GBL: u32 = 21;
+pub const JIT_ARM64_RESERVED: u32 = 22;
+
+// Patch-site kinds (Annex J.4/J.5).
+pub const JIT_PATCH_CLASS: u8 = 0;
+pub const JIT_PATCH_TARGET: u8 = 1;
+/// returnPoints entry meaning "this site has no compiled return point".
+pub const JIT_RETPOINT_NONE: u32 = u32::MAX;
+
+pub const JIT_TIER_THRESHOLD_DEFAULT: u64 = 100;
+pub const JIT_QUEUE_CAPACITY: usize = 65536;
+pub const JIT_CACHE_BYTES_DEFAULT: usize = 64 * 1024 * 1024;
+
 // --- Image header (A.5) ---
+/// Bumped to 2 with the Treaty v2 (JIT Annex) object-model amendments.
+pub const IMG_VERSION: u32 = 2;
 pub const IMG_MAGIC_OFFSET: usize = 0;
 pub const IMG_VERSION_OFFSET: usize = 4;
 pub const IMG_FLAGS_OFFSET: usize = 8;
@@ -465,7 +593,9 @@ pub fn all_constants() -> Vec<(&'static str, &'static str, u64)> {
         "formats": FMT_FIXED, FMT_PTRS, FMT_BYTES_BASE;
         "frame": FRAME_CALLER, FRAME_RETINFO, FRAME_METHOD, FRAME_FLAGS,
             FRAME_RECEIVER, FRAME_FIXED, FLAG_HANDLER, FLAG_ENSURE, FLAG_BLOCKCTX,
-            FLAG_UNWINDCONT, SERIAL_SHIFT, RETINFO_DEST_BITS, RETINFO_PC_SHIFT;
+            FLAG_UNWINDCONT, SERIAL_SHIFT, RETINFO_SITE_SHIFT, RETINFO_SITE_BITS,
+            RETINFO_NO_SITE, RETINFO_DEST_SHIFT, RETINFO_DEST_BITS,
+            RETINFO_PC_SHIFT;
         "stack_slots": STACK_OWNER, STACK_FRAMES_BASE;
         "method_dictionary_slots": MDICT_KEYS, MDICT_VALUES, MDICT_NUM_VM_SLOTS;
         "linked_list_slots": LIST_HEAD, LIST_TAIL, LIST_NUM_VM_SLOTS;
@@ -498,9 +628,10 @@ pub fn all_constants() -> Vec<(&'static str, &'static str, u64)> {
             SCHEDULER_NUM_VM_SLOTS, NUM_PRIORITIES;
         "compiled_method_slots": METHOD_HEADER, METHOD_BYTECODES, METHOD_LITERALS,
             METHOD_SEND_SITES, METHOD_SELECTOR, METHOD_CLASS, METHOD_SOURCE_INFO,
-            METHOD_NUM_SLOTS;
+            METHOD_VMSTATE, METHOD_NUM_SLOTS;
         "compiled_block_slots": BLOCK_HEADER, BLOCK_BYTECODES, BLOCK_LITERALS,
-            BLOCK_SEND_SITES, BLOCK_OUTER_METHOD, BLOCK_INFO, BLOCK_NUM_SLOTS;
+            BLOCK_SEND_SITES, BLOCK_OUTER_METHOD, BLOCK_INFO, BLOCK_PAD,
+            BLOCK_VMSTATE, BLOCK_NUM_SLOTS;
         "method_header": MH_FRAME_SLOTS_SHIFT, MH_FRAME_SLOTS_BITS, MH_ARGC_SHIFT,
             MH_ARGC_BITS, MH_PRIMITIVE_SHIFT, MH_PRIMITIVE_BITS,
             MH_HAS_PRIMITIVE_SHIFT, MH_HANDLER_SLOT_BASE_SHIFT,
@@ -510,13 +641,14 @@ pub fn all_constants() -> Vec<(&'static str, &'static str, u64)> {
         "closure_slots": CLOSURE_COMPILED_BLOCK, CLOSURE_HOME_PROCESS,
             CLOSURE_HOME_OFFSET, CLOSURE_HOME_SERIAL, CLOSURE_CAPTURED_BASE;
         "send_site": SITE_SELECTOR, SITE_ARGC, SITE_CACHE_CLASS, SITE_CACHE_METHOD,
-            SITE_STATIC_CLASS, SITE_STRIDE;
+            SITE_STATIC_CLASS, SITE_COUNTERS, SITE_STRIDE;
         "special_objects": SPECIAL_NIL, SPECIAL_TRUE, SPECIAL_FALSE,
             SPECIAL_SMALLTALK, SPECIAL_PROCESSOR, SPECIAL_CLASS_LIST,
             SPECIAL_SYMBOL_TABLE, SPECIAL_SPECIALIZED_SELECTORS,
             SPECIAL_SEL_DOES_NOT_UNDERSTAND, SPECIAL_SEL_MUST_BE_BOOLEAN,
             SPECIAL_TERMINATE_TRAMPOLINE, SPECIAL_LOW_SPACE_SEMAPHORE,
-            SPECIAL_TIMER_SEMAPHORE, SPECIAL_OBJECTS_COUNT;
+            SPECIAL_TIMER_SEMAPHORE, SPECIAL_JIT_SEMAPHORE,
+            SPECIAL_PROFILER_SEMAPHORE, SPECIAL_OBJECTS_COUNT;
         "primitives": PRIM_CLASS, PRIM_IDENTITY_HASH, PRIM_IDENTICAL, PRIM_NEW,
             PRIM_NEW_SIZED, PRIM_AT, PRIM_AT_PUT, PRIM_SIZE, PRIM_INST_VAR_AT,
             PRIM_INST_VAR_AT_PUT, PRIM_PERFORM_WITH_ARGS,
@@ -541,8 +673,29 @@ pub fn all_constants() -> Vec<(&'static str, &'static str, u64)> {
             PRIM_METHOD_INSTALL, PRIM_FLUSH_CACHES, PRIM_FRAME_INFO,
             PRIM_PROFILER_START, PRIM_PROFILER_STOP, PRIM_PROFILER_REPORT,
             PRIM_PROFILER_TREE, PRIM_VM_COUNTERS, PRIM_VM_COUNTERS_RESET,
-            PRIM_PROFILER_GATE, PRIM_TABLE_SIZE;
-        "image_header": IMG_MAGIC_OFFSET, IMG_VERSION_OFFSET, IMG_FLAGS_OFFSET,
+            PRIM_PROFILER_GATE, PRIM_JIT_NEXT_REQUEST, PRIM_JIT_QUEUE_SIZE,
+            PRIM_JIT_INSTALL, PRIM_JIT_CONTROL, PRIM_JIT_READ_SAMPLES,
+            PRIM_JIT_CODE_INFO, PRIM_TABLE_SIZE;
+        "jit": VMSTATE_COUNTER_SHIFT, VMSTATE_COUNTER_BITS, VMSTATE_QUEUED_SHIFT,
+            VMSTATE_COMPILED_SHIFT, VMSTATE_DNC_SHIFT, VMSTATE_HANDLE_SHIFT,
+            VMSTATE_HANDLE_BITS, DISP_CONTINUE, DISP_EXIT, DISP_HALT, DISP_ERROR,
+            LNK_SEND_MISS, LNK_SEND_SLOW, LNK_ALLOC, LNK_BARRIER_REMEMBER,
+            LNK_STACK_GROW, LNK_SAFEPOINT, LNK_NLR, LNK_PRIM_CALL,
+            LNK_MUST_BE_BOOLEAN, LNK_CALL_INTERP, LNK_EXIT, LNK_RESUME, LNK_COUNT,
+            GBL_VM, GBL_ACTIVE_PROCESS, GBL_SAFEPOINT_PTR, GBL_YOUNG_BASE,
+            GBL_YOUNG_LIMIT, GBL_EXIT_SP, GBL_HALT_VALUE, GBL_NIL, GBL_TRUE,
+            GBL_FALSE, GBL_HANDLES, GBL_LNK, GBL_CLASS_TABLE, GBL_SIZE,
+            JIT_HANDLE_ENTRY_BYTES,
+            JITCTL_GET_THRESHOLD, JITCTL_SET_THRESHOLD, JITCTL_GET_ENABLED,
+            JITCTL_SET_ENABLED, JITCTL_FLUSH_ALL, JITCTL_GET_PROFILING_LEVEL,
+            JITCTL_SET_PROFILING_LEVEL, JITCTL_SET_SAMPLING,
+            JITCTL_GET_SEMAPHORE, JITCTL_MARK_DNC,
+            JIT_AMD64_FP, JIT_AMD64_LNK, JIT_AMD64_GBL,
+            JIT_AMD64_RESERVED, JIT_ARM64_FP, JIT_ARM64_LNK, JIT_ARM64_GBL,
+            JIT_ARM64_RESERVED, JIT_PATCH_CLASS, JIT_PATCH_TARGET,
+            JIT_RETPOINT_NONE, JIT_TIER_THRESHOLD_DEFAULT, JIT_QUEUE_CAPACITY,
+            JIT_CACHE_BYTES_DEFAULT;
+        "image_header": IMG_VERSION, IMG_MAGIC_OFFSET, IMG_VERSION_OFFSET, IMG_FLAGS_OFFSET,
             IMG_SAVED_BASE_OFFSET, IMG_OLD_SPACE_SIZE_OFFSET,
             IMG_SPECIAL_OBJECTS_OFFSET, IMG_CLASS_LIST_OFFSET,
             IMG_ACTIVE_PROCESS_OFFSET, IMG_RESERVED_OFFSET, IMG_HEADER_SIZE,

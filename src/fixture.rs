@@ -144,6 +144,8 @@ impl MethodBuilder {
             vm.heap
                 .set_slot_raw(sites, base + SITE_CACHE_CLASS, Value::from_int(0));
             vm.heap.set_slot_raw(sites, base + SITE_CACHE_METHOD, nil);
+            vm.heap
+                .set_slot_raw(sites, base + SITE_COUNTERS, Value::from_int(0));
             let sc = if s.static_class == Value::from_raw(0) {
                 nil
             } else {
@@ -173,6 +175,7 @@ impl MethodBuilder {
         vm.heap.set_slot_raw(m, METHOD_BYTECODES, Value::from_ptr(code));
         vm.heap.set_slot_raw(m, METHOD_LITERALS, Value::from_ptr(lits));
         vm.heap.set_slot_raw(m, METHOD_SEND_SITES, Value::from_ptr(sites));
+        vm.heap.set_slot_raw(m, METHOD_VMSTATE, Value::from_int(0));
         Value::from_ptr(m)
     }
 
@@ -199,6 +202,8 @@ impl MethodBuilder {
         vm.heap.set_slot_raw(b, BLOCK_SEND_SITES, Value::from_ptr(sites));
         vm.heap.set_slot_raw(b, BLOCK_OUTER_METHOD, outer);
         vm.heap.set_slot_raw(b, BLOCK_INFO, Value::from_int(info));
+        vm.heap.set_slot_raw(b, BLOCK_PAD, Value::from_int(0));
+        vm.heap.set_slot_raw(b, BLOCK_VMSTATE, Value::from_int(0));
         Value::from_ptr(b)
     }
 }

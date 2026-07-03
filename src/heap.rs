@@ -296,7 +296,12 @@ impl Heap {
 
     #[inline(always)]
     pub fn slot(&self, obj: usize, i: usize) -> Value {
-        debug_assert!((i as u64) < self.num_slots(obj), "slot index out of range");
+        debug_assert!(
+            (i as u64) < self.num_slots(obj),
+            "slot index out of range: obj {obj:#x} class {} nslots {} index {i}",
+            self.header(obj).class_index(),
+            self.num_slots(obj)
+        );
         Value::from_raw(self.word(obj + 8 + i * 8))
     }
 
@@ -408,6 +413,14 @@ impl Heap {
         self.alloc_large_count += large as u64;
     }
 
+    /// True when an allocation of `nslots` body slots goes straight to
+    /// old space: over the large-object threshold, or too big to ever fit
+    /// the (possibly stress-shrunken) young space.
+    fn is_large(&self, nslots: usize) -> bool {
+        nslots * 8 > self.config.large_object_bytes
+            || (nslots + 2) * 8 > self.config.young_bytes
+    }
+
     /// Allocate in young space, or old space directly for large objects.
     /// Returns None when young space is exhausted — the GC trigger.
     fn alloc_body(
@@ -416,7 +429,7 @@ impl Heap {
         format: u64,
         nslots: usize,
     ) -> Option<usize> {
-        if nslots * 8 > self.config.large_object_bytes {
+        if self.is_large(nslots) {
             let obj = Self::alloc_in(&mut self.old, class_index, format, nslots)?;
             self.count_old(nslots, true);
             Some(obj)
@@ -443,7 +456,7 @@ impl Heap {
     pub fn alloc_bytes(&mut self, class_index: u32, byte_len: usize) -> Option<usize> {
         let nslots = byte_len.div_ceil(8);
         let pad = nslots * 8 - byte_len;
-        if byte_len > self.config.large_object_bytes {
+        if self.is_large(nslots) {
             let obj =
                 Self::alloc_in(&mut self.old, class_index, FMT_BYTES_BASE + pad as u64, nslots)?;
             self.count_old(nslots, true);

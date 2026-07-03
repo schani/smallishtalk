@@ -29,8 +29,8 @@ testHeaderLayout
 	self assert: (bytes at: 2) = 84.
 	self assert: (bytes at: 3) = 73.
 	self assert: (bytes at: 4) = 77.
-	"version 1"
-	self assert: (bytes at: 5) = 1.
+	"image version (Treaty imgVersion; 2 since the JIT Annex)"
+	self assert: (bytes at: 5) = Treaty imgVersion.
 	"savedBaseAddress = 16r10000 little-endian at offset 16"
 	self assert: (bytes at: 17) = 0.
 	self assert: (bytes at: 18) = 0.

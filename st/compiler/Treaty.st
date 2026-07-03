@@ -117,12 +117,24 @@ flagUnwindcont
 serialShift
 	"frame::SERIAL_SHIFT"
 	^32!
+retinfoSiteShift
+	"frame::RETINFO_SITE_SHIFT"
+	^0!
+retinfoSiteBits
+	"frame::RETINFO_SITE_BITS"
+	^8!
+retinfoNoSite
+	"frame::RETINFO_NO_SITE"
+	^255!
+retinfoDestShift
+	"frame::RETINFO_DEST_SHIFT"
+	^8!
 retinfoDestBits
 	"frame::RETINFO_DEST_BITS"
 	^8!
 retinfoPcShift
 	"frame::RETINFO_PC_SHIFT"
-	^8!
+	^16!
 stackOwner
 	"stack_slots::STACK_OWNER"
 	^0!
@@ -411,9 +423,12 @@ methodClass
 methodSourceInfo
 	"compiled_method_slots::METHOD_SOURCE_INFO"
 	^6!
+methodVmstate
+	"compiled_method_slots::METHOD_VMSTATE"
+	^7!
 methodNumSlots
 	"compiled_method_slots::METHOD_NUM_SLOTS"
-	^7!
+	^8!
 blockHeader
 	"compiled_block_slots::BLOCK_HEADER"
 	^0!
@@ -432,9 +447,15 @@ blockOuterMethod
 blockInfo
 	"compiled_block_slots::BLOCK_INFO"
 	^5!
+blockPad
+	"compiled_block_slots::BLOCK_PAD"
+	^6!
+blockVmstate
+	"compiled_block_slots::BLOCK_VMSTATE"
+	^7!
 blockNumSlots
 	"compiled_block_slots::BLOCK_NUM_SLOTS"
-	^6!
+	^8!
 mhFrameSlotsShift
 	"method_header::MH_FRAME_SLOTS_SHIFT"
 	^0!
@@ -510,9 +531,12 @@ siteCacheMethod
 siteStaticClass
 	"send_site::SITE_STATIC_CLASS"
 	^4!
+siteCounters
+	"send_site::SITE_COUNTERS"
+	^5!
 siteStride
 	"send_site::SITE_STRIDE"
-	^5!
+	^6!
 specialNil
 	"special_objects::SPECIAL_NIL"
 	^0!
@@ -552,9 +576,15 @@ specialLowSpaceSemaphore
 specialTimerSemaphore
 	"special_objects::SPECIAL_TIMER_SEMAPHORE"
 	^12!
+specialJitSemaphore
+	"special_objects::SPECIAL_JIT_SEMAPHORE"
+	^13!
+specialProfilerSemaphore
+	"special_objects::SPECIAL_PROFILER_SEMAPHORE"
+	^14!
 specialObjectsCount
 	"special_objects::SPECIAL_OBJECTS_COUNT"
-	^13!
+	^15!
 primClass
 	"primitives::PRIM_CLASS"
 	^1!
@@ -804,9 +834,219 @@ primVmCountersReset
 primProfilerGate
 	"primitives::PRIM_PROFILER_GATE"
 	^426!
+primJitNextRequest
+	"primitives::PRIM_JIT_NEXT_REQUEST"
+	^430!
+primJitQueueSize
+	"primitives::PRIM_JIT_QUEUE_SIZE"
+	^431!
+primJitInstall
+	"primitives::PRIM_JIT_INSTALL"
+	^432!
+primJitControl
+	"primitives::PRIM_JIT_CONTROL"
+	^433!
+primJitReadSamples
+	"primitives::PRIM_JIT_READ_SAMPLES"
+	^434!
+primJitCodeInfo
+	"primitives::PRIM_JIT_CODE_INFO"
+	^435!
 primTableSize
 	"primitives::PRIM_TABLE_SIZE"
 	^4096!
+vmstateCounterShift
+	"jit::VMSTATE_COUNTER_SHIFT"
+	^0!
+vmstateCounterBits
+	"jit::VMSTATE_COUNTER_BITS"
+	^20!
+vmstateQueuedShift
+	"jit::VMSTATE_QUEUED_SHIFT"
+	^20!
+vmstateCompiledShift
+	"jit::VMSTATE_COMPILED_SHIFT"
+	^21!
+vmstateDncShift
+	"jit::VMSTATE_DNC_SHIFT"
+	^22!
+vmstateHandleShift
+	"jit::VMSTATE_HANDLE_SHIFT"
+	^24!
+vmstateHandleBits
+	"jit::VMSTATE_HANDLE_BITS"
+	^24!
+dispContinue
+	"jit::DISP_CONTINUE"
+	^0!
+dispExit
+	"jit::DISP_EXIT"
+	^1!
+dispHalt
+	"jit::DISP_HALT"
+	^2!
+dispError
+	"jit::DISP_ERROR"
+	^3!
+lnkSendMiss
+	"jit::LNK_SEND_MISS"
+	^0!
+lnkSendSlow
+	"jit::LNK_SEND_SLOW"
+	^1!
+lnkAlloc
+	"jit::LNK_ALLOC"
+	^2!
+lnkBarrierRemember
+	"jit::LNK_BARRIER_REMEMBER"
+	^3!
+lnkStackGrow
+	"jit::LNK_STACK_GROW"
+	^4!
+lnkSafepoint
+	"jit::LNK_SAFEPOINT"
+	^5!
+lnkNlr
+	"jit::LNK_NLR"
+	^6!
+lnkPrimCall
+	"jit::LNK_PRIM_CALL"
+	^7!
+lnkMustBeBoolean
+	"jit::LNK_MUST_BE_BOOLEAN"
+	^8!
+lnkCallInterp
+	"jit::LNK_CALL_INTERP"
+	^9!
+lnkExit
+	"jit::LNK_EXIT"
+	^10!
+lnkResume
+	"jit::LNK_RESUME"
+	^11!
+lnkCount
+	"jit::LNK_COUNT"
+	^16!
+gblVm
+	"jit::GBL_VM"
+	^0!
+gblActiveProcess
+	"jit::GBL_ACTIVE_PROCESS"
+	^8!
+gblSafepointPtr
+	"jit::GBL_SAFEPOINT_PTR"
+	^16!
+gblYoungBase
+	"jit::GBL_YOUNG_BASE"
+	^24!
+gblYoungLimit
+	"jit::GBL_YOUNG_LIMIT"
+	^32!
+gblExitSp
+	"jit::GBL_EXIT_SP"
+	^40!
+gblHaltValue
+	"jit::GBL_HALT_VALUE"
+	^48!
+gblNil
+	"jit::GBL_NIL"
+	^56!
+gblTrue
+	"jit::GBL_TRUE"
+	^64!
+gblFalse
+	"jit::GBL_FALSE"
+	^72!
+gblHandles
+	"jit::GBL_HANDLES"
+	^80!
+gblLnk
+	"jit::GBL_LNK"
+	^88!
+gblClassTable
+	"jit::GBL_CLASS_TABLE"
+	^96!
+gblSize
+	"jit::GBL_SIZE"
+	^128!
+jitHandleEntryBytes
+	"jit::JIT_HANDLE_ENTRY_BYTES"
+	^16!
+jitctlGetThreshold
+	"jit::JITCTL_GET_THRESHOLD"
+	^0!
+jitctlSetThreshold
+	"jit::JITCTL_SET_THRESHOLD"
+	^1!
+jitctlGetEnabled
+	"jit::JITCTL_GET_ENABLED"
+	^2!
+jitctlSetEnabled
+	"jit::JITCTL_SET_ENABLED"
+	^3!
+jitctlFlushAll
+	"jit::JITCTL_FLUSH_ALL"
+	^4!
+jitctlGetProfilingLevel
+	"jit::JITCTL_GET_PROFILING_LEVEL"
+	^5!
+jitctlSetProfilingLevel
+	"jit::JITCTL_SET_PROFILING_LEVEL"
+	^6!
+jitctlSetSampling
+	"jit::JITCTL_SET_SAMPLING"
+	^7!
+jitctlGetSemaphore
+	"jit::JITCTL_GET_SEMAPHORE"
+	^8!
+jitctlMarkDnc
+	"jit::JITCTL_MARK_DNC"
+	^9!
+jitAmd64Fp
+	"jit::JIT_AMD64_FP"
+	^3!
+jitAmd64Lnk
+	"jit::JIT_AMD64_LNK"
+	^13!
+jitAmd64Gbl
+	"jit::JIT_AMD64_GBL"
+	^14!
+jitAmd64Reserved
+	"jit::JIT_AMD64_RESERVED"
+	^12!
+jitArm64Fp
+	"jit::JIT_ARM64_FP"
+	^19!
+jitArm64Lnk
+	"jit::JIT_ARM64_LNK"
+	^20!
+jitArm64Gbl
+	"jit::JIT_ARM64_GBL"
+	^21!
+jitArm64Reserved
+	"jit::JIT_ARM64_RESERVED"
+	^22!
+jitPatchClass
+	"jit::JIT_PATCH_CLASS"
+	^0!
+jitPatchTarget
+	"jit::JIT_PATCH_TARGET"
+	^1!
+jitRetpointNone
+	"jit::JIT_RETPOINT_NONE"
+	^4294967295!
+jitTierThresholdDefault
+	"jit::JIT_TIER_THRESHOLD_DEFAULT"
+	^100!
+jitQueueCapacity
+	"jit::JIT_QUEUE_CAPACITY"
+	^65536!
+jitCacheBytesDefault
+	"jit::JIT_CACHE_BYTES_DEFAULT"
+	^67108864!
+imgVersion
+	"image_header::IMG_VERSION"
+	^2!
 imgMagicOffset
 	"image_header::IMG_MAGIC_OFFSET"
 	^0!
