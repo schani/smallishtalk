@@ -56,10 +56,16 @@ cargo run --bin gen_treaty_st       # rewrites st/compiler/Treaty.st
 ### Running the UI (this branch)
 
 This branch adds a bitmap display, an Oberon-style tiling window manager, a
-small widget toolkit and a live **Class Browser** (see [UI.md](UI.md);
-screenshot: `docs/class-browser-demo.png`). It is **headless-first** — the whole
-UI runs, is driven, and is screenshot-tested with no window, so it works in CI
-and can be operated by a person or an agent.
+small widget toolkit and a live **Class Browser** (see [UI.md](UI.md)). It is
+**headless-first** — the whole UI runs, is driven, and is screenshot-tested with
+no window, so it works in CI and can be operated by a person or an agent.
+
+![The live Class Browser, rendered headlessly by the VM](docs/class-browser-demo.png)
+
+*The five-pane Class Browser rendered by the VM from a running image: category /
+class / protocol / selector lists over the retained live source of
+`OrderedCollection>>add:`. (Text renders uppercase — the v1 baked-in strike font
+maps lowercase to uppercase.)*
 
 A UI image bundles the kernel, the compiler (for live compilation) and the UI
 layers, plus a driver program of ordinary Smalltalk. Build one and run it:
