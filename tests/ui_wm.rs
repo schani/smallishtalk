@@ -71,8 +71,7 @@ fn drive_with_events(name: &str, driver_src: &str, events: &[[i64; 5]]) -> Strin
 fn two_viewers_tile_to_fill_the_track() {
     let driver = r#"
 | d t |
-StrikeFont useClassic.
-d := Display width: 16 height: 24.
+d := Display width: 16 height: 40.
 t := d addTrackLeft: 0 width: 16.
 t open: (Viewer named: 'A').
 t open: (Viewer named: 'B').
@@ -80,33 +79,50 @@ d cursorX: 100 y: 100.
 d draw.
 Transcript show: d asAsciiString.
 "#;
-    // Two viewers, each 12 tall, stacked; each: top border, name glyph in the
-    // menu strip, a menu-strip rule at y=10, a bottom border. Cursor parked
-    // off-screen so this asserts pure tiling. (A at rows 0-11, B at 12-23.)
+    // Two viewers, each 20 tall, stacked; each: top border, name glyph in the
+    // 14px-font menu strip, a menu-strip rule at viewer-relative y=16, a
+    // bottom border. Cursor parked off-screen so this asserts pure tiling.
+    // (A at rows 0-19, B at 20-39.)
     let expected = "\
 ################
-#..###.........#
-#.#...#........#
-#.#...#........#
-#.#####........#
-#.#...#........#
-#.#...#........#
-#.#...#........#
+#..............#
+#..............#
+#.....#........#
+#....#.#.......#
+#....#.#.......#
+#...#...#......#
+#...#...#......#
+#...#####......#
+#..#.....#.....#
+#..#.....#.....#
+#..#.....#.....#
+#..............#
+#..............#
+#..............#
+#..............#
+################
 #..............#
 #..............#
 ################
 ################
-################
-#.####.........#
-#.#...#........#
-#.#...#........#
-#.####.........#
-#.#...#........#
-#.#...#........#
-#.####.........#
+#..............#
+#..............#
+#..#####.......#
+#..#....#......#
+#..#....#......#
+#..#....#......#
+#..#####.......#
+#..#....#......#
+#..#....#......#
+#..#....#......#
+#..#####.......#
+#..............#
+#..............#
 #..............#
 #..............#
 ################
+#..............#
+#..............#
 ################
 ";
     assert_eq!(drive("tile", driver), expected);
@@ -116,7 +132,6 @@ Transcript show: d asAsciiString.
 fn resize_moves_the_split_between_viewers() {
     let driver = r#"
 | d t a b |
-StrikeFont useClassic.
 d := Display width: 16 height: 24.
 t := d addTrackLeft: 0 width: 16.
 a := Viewer named: 'A'.
@@ -162,11 +177,10 @@ fn draw_has_a_deterministic_work_budget() {
     // form clear + per viewer (4 frame edges + 1 separator line + 1 name
     // glyph) x 2 + 1 XOR cursor = 14 BitBlt calls, and 1 frame presented.
     // These are the deterministic WORK metrics CI asserts (timing is only
-    // reported).
+    // reported). 40 tall so both viewers fit the 14px-font menu strip.
     let driver = r#"
 | d t s |
-StrikeFont useClassic.
-d := Display width: 32 height: 24.
+d := Display width: 32 height: 40.
 t := d addTrackLeft: 0 width: 32.
 t open: (Viewer named: 'A').
 t open: (Viewer named: 'B').

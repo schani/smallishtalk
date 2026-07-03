@@ -64,8 +64,8 @@ no window, so it works in CI and can be operated by a person or an agent.
 
 *The five-pane Class Browser rendered by the VM from a running image: category /
 class / protocol / selector lists over the retained live source of
-`OrderedCollection>>add:`. (Text renders uppercase — the v1 baked-in strike font
-maps lowercase to uppercase.)*
+`OrderedCollection>>add:`. Text is the baked-in proportional strike font
+(Adobe Helvetica 12, from the X11 75dpi BDF collection).*
 
 **Quick start** — one command from a fresh checkout builds the VM,
 cross-compiles a UI image and runs it:
@@ -107,7 +107,7 @@ f saveTo: '/tmp/browser.png'.
 Editing a method's source in the browser and calling `accept` recompiles and
 installs it **live**; `Smalltalk evaluate: '3 + 4'` is a do-it.
 
-- Regenerate the baked-in font: `python3 st/tools/gen_font.py > st/ui/gfx/DefaultFont.st`.
+- Regenerate the baked-in font: `python3 st/tools/gen_font_bdf.py st/ui/gfx/helvR12.bdf > st/ui/gfx/DefaultFont.st`.
 - Optional real window (first external dep, `minifb`): `cargo run --features ui -- --ui /tmp/ui.im`.
 - Headless UI tests: `cargo test --test ui_headless --test ui_gfx --test ui_wm --test ui_widgets --test ui_reflection --test ui_browser`.
 

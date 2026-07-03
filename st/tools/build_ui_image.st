@@ -24,7 +24,6 @@ b fileInFile: 'st/ui/gfx/BitBlt.st'.
 b fileInFile: 'st/ui/gfx/Pen.st'.
 b fileInFile: 'st/ui/gfx/StrikeFont.st'.
 b fileInFile: 'st/ui/gfx/DefaultFont.st'.
-b fileInFile: 'st/ui/gfx/ClassicFont.st'.
 b fileInFile: 'st/ui/gfx/Canvas.st'.
 b fileInFile: 'st/ui/gfx/Event.st'.
 b fileInFile: 'st/ui/testing/FrameProbe.st'.

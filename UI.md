@@ -442,10 +442,11 @@ the caret, list highlight rules.
 Classic Smalltalk-80 strike font: one `Form` holding all glyphs laid out
 side-by-side plus an `xTable` of left edges; `characterFormAt:` returns a glyph
 sub-rectangle; `displayString:on:at:` BitBlts glyphs left-to-right.
-- Ship **one** fixed default font, embedded as a `ByteArray` literal in
-  `st/ui/gfx/DefaultFont.st`, generated from a public-domain bitmap font
-  (e.g. an 8×16 or 6×13) by a tiny host script (`st/tools/gen_font.py` → prints
-  the `.st`). No font crate, no runtime file I/O.
+- Ship **one** default font, embedded as a `ByteArray` literal in
+  `st/ui/gfx/DefaultFont.st`, generated from a permissively-licensed bitmap
+  font (Adobe Helvetica 12 BDF, `st/ui/gfx/helvR12.bdf`) by a tiny host script
+  (`st/tools/gen_font_bdf.py` → prints the `.st`). No font crate, no runtime
+  file I/O.
 - `TextStyle`/metrics kept minimal: one size, ascii + a few symbols.
 
 ### 5.6 `Canvas` (drawing façade)
@@ -835,8 +836,10 @@ are the invariant we design against now.)
 5. **Category/protocol metadata.** Real class categories don't exist yet;
    milestone starts with coarse buckets and grows them via `compile:classified:`
    and build-time metadata. Scope creep risk — keep it minimal for M5.
-6. **Font licensing.** Use a clearly public-domain bitmap font for the embedded
-   strike; document its provenance in `DefaultFont.st`.
+6. **Font licensing.** *(resolved)* The embedded strike is Adobe Helvetica
+   Medium 12 from the X11 75dpi BDF collection (`st/ui/gfx/helvR12.bdf`),
+   under the permissive Adobe/DEC notice embedded in the BDF; provenance is
+   documented in `DefaultFont.st`.
 7. **Keyboard/i18n.** ASCII + a few symbols only to start; Unicode input beyond
    BMP basics is out of scope.
 
@@ -853,7 +856,7 @@ instrumented.
 | # | Milestone | Deliverable / demo | Key files |
 |---|---|---|---|
 | **M0** | **Host seam + operability foundation** *(all three pillars start here)* | `primPixelBlit`/`primNextEvent`/`primBitBlt`(rules 0/3/6/7)/`primSaveForm:toFile:`(PNG)/`primClockMonotonicNs`; **virtual clock**; **UIDriver** + `--drive/--shots`; base **work counters**; first golden-screenshot test of a hand-built Form; `minifb` window optional behind `ui`; Treaty green. | `Cargo.toml`, `src/host_ui.rs`, `src/png.rs`, `src/prims.rs`, `src/treaty.rs`, `st/compiler/Treaty.st`, `tests/ui_headless.rs` |
-| **M1** | **Graphics kernel** | `Form`/`Point`/`Rectangle`/`BitBlt`/`Pen`/`StrikeFont`/`Canvas`; draw shapes + text; golden-image tests. | `st/ui/gfx/*.st`, `st/tools/gen_font.py` |
+| **M1** | **Graphics kernel** | `Form`/`Point`/`Rectangle`/`BitBlt`/`Pen`/`StrikeFont`/`Canvas`; draw shapes + text; golden-image tests. | `st/ui/gfx/*.st`, `st/tools/gen_font_bdf.py` |
 | **M2** | **Event loop + tiling WM** | UI `Process` that **drains events every tick independent of redraw**; `FrameProbe` wired into the loop (per-phase timing + work counters); `Display`/`Track`/`Viewer` tiling; open/close/resize viewers; damage+redraw; XOR cursor. Demo (headless, screenshotted): two tiled viewers, resize scenario + golden shots. | `st/ui/wm/*.st`, `st/ui/gfx/Event.st`, `st/ui/testing/FrameProbe.st` |
 | **M3** | **Widget toolkit** | `View`/`Controller`/`PanedView`/`ListPane`/`TextPane`(editable, incl. **set-selection-to-range** for compile-error display, §10.2)/`MenuPane`/`ScrollBar`. Demo: a list + editable text viewer; Transcript viewer showing live output. | `st/ui/widgets/*.st` |
 | **M4** | **Reflection + source retention** | Stop nilling the source slot; store source; reflection API; populated `Smalltalk`; `compile:classified:` with cache flush. Test: enumerate classes, read source, recompile a method live. | `st/compiler/ImageWriter.st`, `st/kernel/*.st` |
@@ -913,7 +916,7 @@ the browser doesn't require; color/grayscale depths; multiple fonts.
 - `st/ui/testing/*.st` *(new)* — `UIDriver`, `UIScript` (scenario verbs),
   `UITestCase` (SUnit base: boot headless Display, run scenario, assert model +
   golden), `FrameProbe`/`UIProfiler` (instrumentation, §13).
-- `st/tools/gen_font.py` *(new)* — emit the embedded strike font `.st`.
+- `st/tools/gen_font_bdf.py` *(new)* — emit the embedded strike font `.st` from a BDF.
 - `st/tools/build_ui_image.st` *(new)* — build an image whose `startUp` opens the
   Display and a Class Browser (and a headless variant for the driver/tests).
 
