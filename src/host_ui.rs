@@ -50,6 +50,18 @@ pub struct HostUi {
     /// Windowed builds open a real window on first present; headless never does.
     #[cfg(feature = "ui")]
     pub windowed: bool,
+    /// The buffer dimensions the current window was created for. We recreate the
+    /// window only when THESE change — not when the OS-reported window size
+    /// differs, which it always does on a Retina/HiDPI display (physical vs
+    /// logical size), so comparing against get_size() would recreate every frame.
+    #[cfg(feature = "ui")]
+    pub win_w: u32,
+    #[cfg(feature = "ui")]
+    pub win_h: u32,
+    /// Last left-button state, so a button event fires on press/release edges
+    /// rather than every frame the button is held.
+    #[cfg(feature = "ui")]
+    pub last_down: bool,
 }
 
 impl Default for HostUi {
@@ -64,6 +76,12 @@ impl Default for HostUi {
             window: None,
             #[cfg(feature = "ui")]
             windowed: false,
+            #[cfg(feature = "ui")]
+            win_w: 0,
+            #[cfg(feature = "ui")]
+            win_h: 0,
+            #[cfg(feature = "ui")]
+            last_down: false,
         }
     }
 }
@@ -164,12 +182,14 @@ impl HostUi {
             return;
         }
         let (w, h) = (self.buf_width as usize, self.buf_height as usize);
-        let recreate = match &self.window {
-            Some(win) => win.get_size() != (w, h),
-            None => true,
-        };
+        // Recreate only when the buffer size changed — never on a get_size()
+        // mismatch (that fires every frame on HiDPI; see the field docs).
+        let recreate =
+            self.window.is_none() || self.win_w != self.buf_width || self.win_h != self.buf_height;
         if recreate {
             self.window = Window::new("smallishtalk", w, h, WindowOptions::default()).ok();
+            self.win_w = self.buf_width;
+            self.win_h = self.buf_height;
         }
         if let Some(win) = &mut self.window {
             let _ = win.update_with_buffer(&self.buffer, w, h);
@@ -179,21 +199,34 @@ impl HostUi {
     #[cfg(feature = "ui")]
     fn harvest_window(&mut self) {
         use minifb::{Key, MouseButton, MouseMode};
-        let Some(win) = &self.window else { return };
-        if !win.is_open() || win.is_key_down(Key::Escape) {
+        // Snapshot everything off the window, then mutate our own fields (avoids
+        // borrowing the window and the event queue at once).
+        let Some((open, esc, pos, down, keys)) = self.window.as_ref().map(|win| {
+            (
+                win.is_open(),
+                win.is_key_down(Key::Escape),
+                win.get_mouse_pos(MouseMode::Discard),
+                win.get_mouse_down(MouseButton::Left),
+                win.get_keys_pressed(minifb::KeyRepeat::No),
+            )
+        }) else {
+            return;
+        };
+        if !open || esc {
             self.events.push_back([EV_CLOSE, 0, 0, 0, 0]);
             return;
         }
-        if let Some((x, y)) = win.get_mouse_pos(MouseMode::Discard) {
-            self.events
-                .push_back([EV_MOUSE_MOVE, x as i64, y as i64, 0, 0]);
-            let down = win.get_mouse_down(MouseButton::Left);
-            self.events
-                .push_back([EV_MOUSE_BUTTON, x as i64, y as i64, 1, down as i64]);
+        if let Some((x, y)) = pos {
+            self.events.push_back([EV_MOUSE_MOVE, x as i64, y as i64, 0, 0]);
+            // Only on a press/release edge, so a held button doesn't re-fire.
+            if down != self.last_down {
+                self.events
+                    .push_back([EV_MOUSE_BUTTON, x as i64, y as i64, 1, down as i64]);
+                self.last_down = down;
+            }
         }
-        for key in win.get_keys_pressed(minifb::KeyRepeat::No) {
-            self.events
-                .push_back([EV_KEY_DOWN, key as i64, 0, 0, 0]);
+        for key in keys {
+            self.events.push_back([EV_KEY_DOWN, key as i64, 0, 0, 0]);
         }
     }
 }
