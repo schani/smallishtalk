@@ -23,9 +23,16 @@ path = "src/main.rs"
 default = []
 vm-counters = []
 
+# The windowed UI backend (UI.md §3.4): a real minifb window presenting the
+# same ARGB buffer the headless build fills. Off by default — headless is the
+# primary run mode, so `cargo test` and agent-driven sessions pull no crates
+# and open no window.
+ui = ["dep:minifb"]
+
 # Line tables in release builds so `perf` / flamegraphs symbolize the
 # interpreter (docs/profiling.md); does not change codegen.
 [profile.release]
 debug = "line-tables-only"
 
 [dependencies]
+minifb = { version = "0.27", optional = true }   # first external dependency (UI.md §3.4)

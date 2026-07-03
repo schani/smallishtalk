@@ -762,12 +762,21 @@ primClockWallMs
 primSignalAtMs
 	"primitives::PRIM_SIGNAL_AT_MS"
 	^322!
+primClockMonotonicNs
+	"primitives::PRIM_CLOCK_MONOTONIC_NS"
+	^323!
 primNextEvent
 	"primitives::PRIM_NEXT_EVENT"
 	^330!
 primPixelBlit
 	"primitives::PRIM_PIXEL_BLIT"
 	^331!
+primBitblt
+	"primitives::PRIM_BITBLT"
+	^332!
+primSaveForm
+	"primitives::PRIM_SAVE_FORM"
+	^333!
 primSnapshot
 	"primitives::PRIM_SNAPSHOT"
 	^400!
