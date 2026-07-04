@@ -6,7 +6,7 @@ Object subclass: #Treaty
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !Treaty class methodsFor: 'constants'!
 tagIntBit

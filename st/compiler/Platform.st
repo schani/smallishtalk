@@ -6,7 +6,7 @@ Object subclass: #Platform
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !Platform class methodsFor: 'files'!
 readFile: aPathString

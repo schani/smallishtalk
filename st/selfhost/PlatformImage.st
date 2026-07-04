@@ -6,7 +6,7 @@ Object subclass: #Platform
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Selfhost'!
+	category: 'System'!
 
 !Platform class methodsFor: 'primitives'!
 primOpen: path mode: m

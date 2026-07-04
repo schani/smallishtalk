@@ -24,7 +24,7 @@ Object subclass: #StGlobalRef
 	instanceVariableNames: 'name'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StGlobalRef class methodsFor: 'instance creation'!
 named: aString
@@ -47,7 +47,7 @@ Object subclass: #StSiteSpec
 	instanceVariableNames: 'selector argc isSuper'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StSiteSpec methodsFor: 'accessing'!
 selector ^selector!
@@ -65,7 +65,7 @@ Object subclass: #StCodeSpec
 	instanceVariableNames: 'selector argc frameSlots primitive handlerSlotBase mhFlags insns literals sites'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 "Common shape of compiled methods and compiled blocks."
 
@@ -112,7 +112,7 @@ StCodeSpec subclass: #StMethodSpec
 	instanceVariableNames: 'methodClassName'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StMethodSpec methodsFor: 'accessing'!
 methodClassName ^methodClassName!
@@ -122,7 +122,7 @@ StCodeSpec subclass: #StBlockSpec
 	instanceVariableNames: 'numCaptured hasNlr'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StBlockSpec methodsFor: 'accessing'!
 numCaptured ^numCaptured!
@@ -134,7 +134,7 @@ Object subclass: #StClassScope
 	instanceVariableNames: 'name instVarNames'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 "What the code generator needs to know about the class a method is
  compiled for: the full (inherited-first) instance-variable name list."
@@ -170,7 +170,7 @@ argNames tempNames boxedNames insns literals sites sp maxSp scratchBase
 isBlock reservedFailureSlot loopBindings'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StCodeGen class methodsFor: 'compiling'!
 compileMethod: methodNode inClass: aClassScope

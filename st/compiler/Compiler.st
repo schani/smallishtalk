@@ -9,7 +9,7 @@ Object subclass: #StImageBuilder
 	instanceVariableNames: 'writer'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StImageBuilder class methodsFor: 'building'!
 new
@@ -52,7 +52,8 @@ handleDoIt: source
 	sup := stmt receiver name = 'nil' ifTrue: [nil] ifFalse: [stmt receiver name].
 	name := (stmt arguments at: 1) value asString.
 	ivars := self splitWords: (stmt arguments at: 2) value.
-	writer defineClass: name superclass: sup instVarNames: ivars!
+	writer defineClass: name superclass: sup instVarNames: ivars
+		category: (stmt arguments at: 5) value asString!
 
 splitWords: aString
 	| out ws inWord k c |

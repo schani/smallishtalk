@@ -82,6 +82,39 @@ testMenuPaneResolvesCommandAtPoint
 	self assert: (m commandAtPoint: (Point x: 5 y: 2)) equals: #Accept.
 	self assert: (m commandAtPoint: (Point x: 5 y: 17)) equals: #Cancel.
 	self assert: (m commandAtPoint: (Point x: 5 y: 100)) equals: nil!
+testListPaneScrollBarScrollsWithoutSelecting
+	"a ListPane whose items overflow shows a 6-px scroll-bar strip on its
+	 right: a click in the strip jump-scrolls (topIndex from the click's
+	 fraction of the bar) without touching the selection; row clicks then
+	 select relative to the new topIndex. A pane whose items fit shows no
+	 strip and keeps the full row width."
+	| lp items f |
+	items := OrderedCollection new.
+	1 to: 10 do: [:k | items add: 'item' , k printString].
+	lp := ListPane bounds: (Rectangle left: 0 top: 0 right: 40 bottom: 32).
+	lp items: items.
+	"visibleRows = (32-2)//15 = 2, 10 items -> the strip is x[34,40)"
+	self assert: lp needsScrollBar.
+	self assert: lp contentRight equals: 34.
+	lp select: 1.
+	"click at the bar's bottom: t = 31*10//32+1 = 10, clamped to maxTop 9"
+	self assert: (lp selectAtPoint: (Point x: 36 y: 31)).
+	self assert: lp topIndex equals: 9.
+	self assert: lp selectionIndex equals: 1.
+	"a row click now selects relative to the scrolled top: row 2 = item 10"
+	self assert: (lp selectAtPoint: (Point x: 3 y: 17)).
+	self assert: lp selectedItem equals: 'item10'.
+	"click at the bar's top scrolls back"
+	self assert: (lp selectAtPoint: (Point x: 36 y: 0)).
+	self assert: lp topIndex equals: 1.
+	"the rendered strip: the bar frame's top-left corner pixel is black"
+	f := Form width: 40 height: 32.
+	lp displayOn: (Canvas on: f).
+	self assert: (f pixelValueAtX: 34 y: 0) equals: 1.
+	"no strip when the items fit"
+	lp items: (Array with: 'a' with: 'b').
+	self deny: lp needsScrollBar.
+	self assert: lp contentRight equals: 40!
 testScrollBarThumbTracksPosition
 	| sb |
 	sb := ScrollBar bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 5 y: 100)).

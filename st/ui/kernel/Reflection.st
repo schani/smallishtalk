@@ -44,6 +44,8 @@ methodSelector
 	^self instVarAt: 5! !
 
 !Behavior methodsFor: 'reflection'!
+classIndex
+	^classIndex!
 methodDictionary
 	^methodDictionary!
 selectors
@@ -131,22 +133,34 @@ commentsDict
 	comments isNil ifTrue: [comments := Dictionary new].
 	^comments!
 categoryOf: aClass
-	^self categoriesDict at: aClass ifAbsent: ['Kernel']!
+	^self categoriesDict at: aClass ifAbsent: [self defaultCategoryOf: aClass]!
+defaultCategoryOf: aClass
+	"the class's source-declared category, from the SystemClassCategories
+	 table the image writer binds (parallel to SystemClassList)."
+	| idx cat |
+	SystemClassCategories isNil ifTrue: [^'Kernel'].
+	idx := aClass classIndex.
+	(idx notNil and: [idx + 1 <= SystemClassCategories size]) ifTrue: [
+		cat := SystemClassCategories at: idx + 1.
+		cat notNil ifTrue: [^cat]].
+	^'Kernel'!
 classify: aClass under: aCategory
 	self categoriesDict at: aClass put: aCategory!
 categories
-	"the set of category names in use, in first-seen order."
+	"the category names in use, alphabetically."
 	| out cat |
 	out := OrderedCollection new.
 	Smalltalk allClassesDo: [:c |
 		cat := self categoryOf: c.
 		(out includes: cat) ifFalse: [out add: cat]].
+	out sort: [:a :b | a < b].
 	^out!
 classesIn: aCategory
 	| out |
 	out := OrderedCollection new.
 	Smalltalk allClassesDo: [:c |
 		(self categoryOf: c) = aCategory ifTrue: [out add: c]].
+	out sort: [:a :b | a name asString < b name asString].
 	^out! !
 
 !SystemOrganization methodsFor: 'comments'!
@@ -165,16 +179,18 @@ classify: aSelector under: aProtocol for: aClass
 	self protocolsDict at: (self protocolKeyFor: aClass selector: aSelector)
 		put: aProtocol!
 protocolsFor: aClass
-	"the distinct protocols of aClass's selectors, in first-seen order."
+	"the distinct protocols of aClass's selectors, alphabetically."
 	| out p |
 	out := OrderedCollection new.
 	aClass selectors do: [:sel |
 		p := self protocolOf: aClass selector: sel.
 		(out includes: p) ifFalse: [out add: p]].
+	out sort: [:a :b | a asString < b asString].
 	^out!
 selectorsIn: aProtocol of: aClass
 	| out |
 	out := OrderedCollection new.
 	aClass selectors do: [:sel |
 		(self protocolOf: aClass selector: sel) = aProtocol ifTrue: [out add: sel]].
+	out sort: [:a :b | a asString < b asString].
 	^out! !

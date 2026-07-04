@@ -25,7 +25,7 @@ Object subclass: #StToken
 	instanceVariableNames: 'type value position'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StToken class methodsFor: 'instance creation'!
 type: aSymbol value: aValue position: anInteger
@@ -49,7 +49,7 @@ Object subclass: #StByteBuf
 	instanceVariableNames: 'str n'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StByteBuf class methodsFor: 'instance creation'!
 new: capacity
@@ -82,7 +82,7 @@ Object subclass: #StLexer
 	instanceVariableNames: 'source bytes binBytes pos lastType'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StLexer class methodsFor: 'instance creation'!
 on: aString

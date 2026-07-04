@@ -16,7 +16,7 @@ Object subclass: #StObj
 	instanceVariableNames: 'classIndex format slots bytes address immutable'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 "format: #fixed #ptrs #bytes. slots hold Integers (tagged as SmallInts)
  or StObj references; bytes hold 0..255."
@@ -79,10 +79,10 @@ footprintWords
 
 Object subclass: #StClassDesc
 	instanceVariableNames: 'name superName classIndex instVarNames format
-classObj metaObj metaIndex methodSelectors methodObjs classMethodSelectors classMethodObjs'
+classObj metaObj metaIndex methodSelectors methodObjs classMethodSelectors classMethodObjs category'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StClassDesc methodsFor: 'accessing'!
 name ^name!
@@ -97,6 +97,8 @@ instVarNames ^instVarNames!
 instVarNames: c instVarNames := c!
 format ^format!
 format: f format := f!
+category ^category!
+category: c category := c!
 classObj ^classObj!
 classObj: o classObj := o!
 metaObj ^metaObj!
@@ -118,7 +120,7 @@ globalAssocs globalBuckets smalltalkObj processObj stackObj specialsObj
 charObjs'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StImageWriter class methodsFor: 'constants'!
 savedBase
@@ -266,11 +268,16 @@ findClass: aName
 	^nil!
 
 defineClass: aName superclass: superName instVarNames: ivarList
+	^self defineClass: aName superclass: superName instVarNames: ivarList
+		category: 'Kernel'!
+
+defineClass: aName superclass: superName instVarNames: ivarList category: aCategory
 	| d treatyIdx fmt |
 	(self findClass: aName) notNil ifTrue: [self error: 'class redefined: ' , aName].
 	d := StClassDesc new.
 	d name: aName.
 	d superName: superName.
+	d category: aCategory.
 	d instVarNames: ivarList asOrderedCollection.
 	d initMethods.
 	treatyIdx := StImageWriter treatyIndexFor: aName.
@@ -510,7 +517,7 @@ mdictFor: selectors objs: methodObjs
 buildSpecialsWithStartUp: startUpObj
 	"scheduler, semaphores, class list, symbol table, specialized
 	 selectors, the poised process, and the special objects array"
-	| sched queues classList maxIdx symtab specSels sels lowSem timerSem dnuSym mbbSym |
+	| sched queues classList maxIdx symtab specSels sels lowSem timerSem dnuSym mbbSym catTable catStrings catObj |
 	dnuSym := self symbolFor: 'doesNotUnderstand:'.
 	mbbSym := self symbolFor: 'mustBeBoolean'.
 	smalltalkObj := self addObj: (StObj fixed: Treaty classSystemDictionary slots: 0).
@@ -541,6 +548,20 @@ buildSpecialsWithStartUp: startUpObj
 	"UI.md §9.2: expose the class list to image code as a global, so the
 	 reflection API (Smalltalk allClasses) can enumerate without a primitive."
 	(self globalAssocFor: 'SystemClassList') at: 2 put: classList.
+
+	"the class's declared source category, parallel to SystemClassList
+	 (indexed by classIndex; metaclass slots stay nil) — the browser's
+	 default categorization. One shared string per distinct category."
+	catTable := self addObj: (StObj ptrs: Treaty classArray slots: maxIdx + 1).
+	catStrings := OrderedCollection new.
+	classes do: [:d |
+		catObj := nil.
+		catStrings do: [:pair | (pair at: 1) = d category ifTrue: [catObj := pair at: 2]].
+		catObj isNil ifTrue: [
+			catObj := self stringFor: d category.
+			catStrings add: (Array with: d category with: catObj)].
+		catTable at: d classIndex + 1 put: catObj].
+	(self globalAssocFor: 'SystemClassCategories') at: 2 put: catTable.
 
 	sels := OrderedCollection new.
 	sels add: '+'; add: '-'; add: '*'; add: '//'; add: '\\'.
