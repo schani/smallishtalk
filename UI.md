@@ -705,15 +705,33 @@ class-side vs instance-side switch. Data comes entirely from §9's reflection AP
   support "set selection to range [i,j]" — a capability M3 must provide, so it is
   listed as an M3 requirement, not discovered in M5. On success, the selector
   list refreshes and the method is **live immediately**.
-- **do-it / print-it**: select text anywhere, middle-click "execute" → compile a
+- **do-it / print-it**: select text anywhere, pop the operate menu → compile a
   zero-arg doit method in a scratch context, run it; *print-it* appends the
   result's `printString`. (Same mechanism the Workspace uses.)
 
 ### 10.3 Companion viewers (small, reuse the toolkit)
 - **Transcript** viewer: a read-only `TextPane` fed by `Transcript` (already
   exists — just render its stream). Immediate proof the UI shows live output.
-- **Workspace** viewer: an editable `TextPane` with do-it/print-it. Falls out of
-  the toolkit almost for free and makes the system usable.
+- **Workspace** viewer *(implemented — `st/ui/apps/Workspace.st`, `make
+  ui-workspace`)*: an editable `TextPane` with do-it/print-it. Type to edit;
+  a left-press–drag sweeps a selection (`TextPane` anchors the drag; the
+  supervisor's routing delivers the moves); **right-clicking ON the selected
+  text** pops a `MenuPane` operate menu with **do it** / **print it** — do-it
+  evaluates the selection (the whole buffer when nothing is selected) via
+  `Smalltalk evaluate:`, print-it also inserts `' ' , result printString`
+  right after the selection and leaves it selected, so the next keystroke
+  replaces it. The host feeds the gestures: `src/host_ui.rs` reports the
+  right button as button 2 (event slot `c`) with the same edge-only
+  discipline as the left, and typed characters via minifb's input callback
+  as key events carrying the character in slot `c` (backspace/enter/arrows
+  are translated from raw keys to the classic control codes 8/10/28–31;
+  macOS function-key pseudo-characters U+F700–F8FF are filtered — they are
+  keys, not text). `TextPane` inserts only what a byte `String` can hold
+  (32..255 and 10) and navigates on 28/29, and the kernel's `at:put:`
+  primitive-failure fallback diagnoses improper stores instead of raising
+  a bogus `MessageNotUnderstood`. Tested end-to-end through the
+  posted-event pipeline in `st/tests/ui/WorkspaceTests.st` (plus
+  `KernelTests`/`WidgetTests` for the guards).
 
 ---
 

@@ -1,9 +1,10 @@
-"M5/M6 — the Class Browser and Workspace (UI.md §10), tested on the VM with
- the in-image harness. Navigate categories -> classes -> protocols ->
- selectors -> retained source; edit and ACCEPT to recompile live; do-it;
- click routing through the UISupervisor; and the full-stack screenshot to
- PNG (verified by reading the file back through Platform). The launcher
- driver sets the TestShotPath global to a scratch path for the PNG."
+"M5 — the Class Browser (UI.md §10), tested on the VM with the in-image
+ harness. Navigate categories -> classes -> protocols -> selectors ->
+ retained source; edit and ACCEPT to recompile live; do-it; click routing
+ through the UISupervisor; and the full-stack screenshot to PNG (verified
+ by reading the file back through Platform). The launcher driver sets the
+ TestShotPath global to a scratch path for the PNG. The Workspace has its
+ own suite (WorkspaceTests)."
 
 TestCase subclass: #BrowserTests
 	instanceVariableNames: ''
@@ -99,15 +100,6 @@ testBrowserOpensAndScreenshotsTheFullStack
 	self assert: (png at: 6) equals: 10.
 	self assert: (png at: 7) equals: 26.
 	self assert: (png at: 8) equals: 10!
-testWorkspaceDoItAndPrintIt
-	"M6: the Workspace — type an expression and evaluate it live."
-	| w |
-	w := Workspace bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 100 y: 50)).
-	w contents: '3 * 14'.
-	self assert: w doIt equals: 42.
-	w contents: '10 - 3'.
-	w printIt.
-	self assert: w contents equals: '10 - 3 7'!
 testBrowserClickNavigates
 	"a real mouse-down posted through primitive 334, routed through the
 	 UISupervisor -> the browser -> the class list pane under the pointer

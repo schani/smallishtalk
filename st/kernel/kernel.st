@@ -328,6 +328,23 @@ instVarAt: i put: v
 perform: aSelector withArguments: anArray
 	<primitive: 11>
 	^self primitiveFailed: #perform:withArguments:!
+at: i
+	"primitive-failure fallback: at: is a specialized selector the VM
+	 inlines to its primitive, which handles every proper access — reaching
+	 this method means the access is improper, so diagnose it (without a
+	 fallback it surfaced as a bogus MessageNotUnderstood)."
+	(i isKindOf: Integer)
+		ifFalse: [^self error: 'at: index must be an Integer'].
+	^self error: 'at: index out of bounds'!
+at: i put: v
+	"primitive-failure fallback for the inlined at:put:; see at:. The
+	 failure causes left after the index checks: a value the receiver
+	 cannot hold (> 255 for a byte object), or an immutable receiver."
+	(i isKindOf: Integer)
+		ifFalse: [^self error: 'at:put: index must be an Integer'].
+	(i >= 1 and: [i <= self size])
+		ifFalse: [^self error: 'at:put: index out of bounds'].
+	^self error: 'at:put: improper store (value unstorable here, or the receiver is immutable)'!
 yourself
 	^self!
 isKindOf: aClass

@@ -4,6 +4,8 @@
 #   scripts/run-ui.sh              # headless: render a Class Browser -> ui-screenshot.png
 #   scripts/run-ui.sh --window     # live, click-navigable window (needs the `ui`
 #                                  #   cargo feature's deps + a display server)
+#   scripts/run-ui.sh --workspace  # live Workspace window: type to edit, drag to
+#                                  #   select, right-click for do it / print it
 #
 # Builds the VM binary, cross-compiles a UI image (kernel + compiler + UI layers
 # + a demo driver) with GNU Smalltalk, and runs it.
@@ -14,6 +16,7 @@ cd "$ROOT"
 
 MODE=headless
 [ "${1:-}" = "--window" ] && MODE=window
+[ "${1:-}" = "--workspace" ] && MODE=workspace
 
 command -v gst >/dev/null 2>&1 || {
 	echo "error: GNU Smalltalk (gst) is required to build the image." >&2
@@ -38,6 +41,10 @@ if [ "$MODE" = window ]; then
 	DRIVER=st/tools/ui_browser_window.st
 	echo "== building the VM (with the ui window feature) =="
 	cargo build --release --features ui
+elif [ "$MODE" = workspace ]; then
+	DRIVER=st/tools/ui_workspace_window.st
+	echo "== building the VM (with the ui window feature) =="
+	cargo build --release --features ui
 else
 	DRIVER=st/tools/ui_browser_demo.st
 	echo "== building the VM =="
@@ -48,7 +55,7 @@ echo "== cross-compiling the UI image =="
 gst -Q "${COMPILER[@]}" st/tools/build_ui_image.st -a "$DRIVER" "$IMG"
 
 echo "== running =="
-if [ "$MODE" = window ]; then
+if [ "$MODE" != headless ]; then
 	# --verbose prints window-creation / present / close diagnostics to stderr.
 	exec ./target/release/smallishtalk --ui --verbose "$IMG"
 else

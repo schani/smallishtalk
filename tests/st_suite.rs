@@ -30,11 +30,13 @@ fn compiler_sources() -> Vec<String> {
 /// it takes to add a suite.
 const SUITE_SOURCES: &[&str] = &[
     "st/tests/ui/Harness.st",
+    "st/tests/ui/KernelTests.st",
     "st/tests/ui/GfxTests.st",
     "st/tests/ui/WidgetTests.st",
     "st/tests/ui/WmTests.st",
     "st/tests/ui/ReflectionTests.st",
     "st/tests/ui/BrowserTests.st",
+    "st/tests/ui/WorkspaceTests.st",
 ];
 
 #[test]
@@ -46,10 +48,15 @@ fn in_image_test_suite_passes() {
 
     // The driver: point the screenshot test at a scratch path, then run
     // every suite. The verdict lines come from the in-image TestRunner.
+    // More suites than the kernel's Array class with:*5 can hold — build
+    // the list with an OrderedCollection instead.
     let driver = format!(
-        "TestShotPath := '{}'.\n\
-         TestRunner runAll: (Array with: GfxTests with: WidgetTests with: WmTests \
-         with: ReflectionTests with: BrowserTests).\n",
+        "| suites |\n\
+         TestShotPath := '{}'.\n\
+         suites := OrderedCollection new.\n\
+         suites add: KernelTests; add: GfxTests; add: WidgetTests; add: WmTests; \
+         add: ReflectionTests; add: BrowserTests; add: WorkspaceTests.\n\
+         TestRunner runAll: suites.\n",
         shot.display()
     );
     let driver_path = dir.join("suite.driver.st");

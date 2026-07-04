@@ -70,6 +70,10 @@ isMouseDown
 	^type = 2 and: [d = 1]!
 isMouseUp
 	^type = 2 and: [d = 0]!
+isRightMouseDown
+	"button 2's press edge (slot c is the button number: 1 left, 2 right —
+	 the encoding src/host_ui.rs emits)."
+	^type = 2 and: [d = 1 and: [c = 2]]!
 isKeyDown
 	^type = 3!
 isKeyUp
