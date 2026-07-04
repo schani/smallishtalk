@@ -8,7 +8,7 @@
  the acceptAction hook with the current contents (the browser recompiles)."
 
 View subclass: #TextPane
-	instanceVariableNames: 'contents selStart selStop acceptAction'
+	instanceVariableNames: 'contents selStart selStop acceptAction dragAnchor'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'UI-Widgets'!
@@ -193,8 +193,17 @@ drawSelectionOn: aCanvas
 
 !TextPane methodsFor: 'events'!
 handleEvent: anEvent
+	"left press places the caret and anchors a drag-selection; moves while
+	 the button is held sweep it (the router's mouse capture keeps them
+	 coming wherever the pointer wanders); the release drops the anchor.
+	 The right button is NOT ours — the owner (e.g. the Workspace) pops its
+	 operate menu on it."
 	anEvent isKeystroke ifTrue: [^self handleKey: anEvent].
-	anEvent isMouseDown ifTrue: [^self placeCaretAt: anEvent position].
+	anEvent isMouseDown ifTrue: [
+		anEvent isRightMouseDown ifTrue: [^false].
+		^self beginSelectionAt: anEvent position].
+	anEvent isMouseMove ifTrue: [^self dragSelectionTo: anEvent position].
+	anEvent isMouseUp ifTrue: [dragAnchor := nil. ^false].
 	^false!
 handleKey: anEvent
 	| code |
@@ -202,12 +211,24 @@ handleKey: anEvent
 	code = 8 ifTrue: [self backspace. ^true].
 	(code >= 32 or: [code = 10]) ifTrue: [self insertCharacter: code. ^true].
 	^false!
-placeCaretAt: aPoint
-	"map a click to the nearest offset on its line: walk the line's characters
-	 accumulating (proportional) advances until the click falls before a
-	 character's midpoint."
-	| line off i lineNo font x cw |
+beginSelectionAt: aPoint
 	(self containsPoint: aPoint) ifFalse: [^false].
+	dragAnchor := self offsetForPoint: aPoint.
+	self caretAt: dragAnchor.
+	^true!
+dragSelectionTo: aPoint
+	dragAnchor isNil ifTrue: [^false].
+	self selectFrom: dragAnchor to: (self offsetForPoint: aPoint).
+	^true!
+placeCaretAt: aPoint
+	(self containsPoint: aPoint) ifFalse: [^false].
+	self caretAt: (self offsetForPoint: aPoint).
+	^true!
+offsetForPoint: aPoint
+	"the character offset nearest aPoint: walk the point's line accumulating
+	 (proportional) advances until it falls before a character's midpoint.
+	 No containment check — a drag tracks past the edges and clamps."
+	| line off i lineNo font x cw |
 	line := ((aPoint y - bounds top - self topInset) max: 0) // self lineHeight.
 	"walk to the start of that line"
 	off := 0.
@@ -221,8 +242,7 @@ placeCaretAt: aPoint
 	x := bounds left + 1.
 	[off < contents size and: [(contents at: off + 1) ~= 10]] whileTrue: [
 		cw := font widthOfCharacter: (contents at: off + 1).
-		aPoint x < (x + (cw // 2)) ifTrue: [self caretAt: off. ^true].
+		aPoint x < (x + (cw // 2)) ifTrue: [^off].
 		x := x + cw.
 		off := off + 1].
-	self caretAt: off.
-	^true! !
+	^off! !

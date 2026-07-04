@@ -13,12 +13,17 @@ bench:
 	bash bench/run.sh $(BENCH_ARGS)
 
 # Run the classic Smalltalk UI (UI.md) from a fresh checkout.
-#   make ui          headless: render a Class Browser -> ui-screenshot.png
-#   make ui-window   live, click-navigable window (needs the `ui` feature + a display)
+#   make ui            headless: render a Class Browser -> ui-screenshot.png
+#   make ui-window     live, click-navigable window (needs the `ui` feature + a display)
+#   make ui-workspace  live Workspace window: edit, drag-select, right-click for
+#                      do it / print it
 ui:
 	bash scripts/run-ui.sh
 
 ui-window:
 	bash scripts/run-ui.sh --window
 
-.PHONY: test bench ui ui-window
+ui-workspace:
+	bash scripts/run-ui.sh --workspace
+
+.PHONY: test bench ui ui-window ui-workspace

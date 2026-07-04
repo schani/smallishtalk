@@ -68,6 +68,15 @@ pub struct HostUi {
     /// rather than every frame the button is held.
     #[cfg(feature = "ui")]
     pub last_down: bool,
+    /// Last right-button state — same edge discipline as `last_down`.
+    #[cfg(feature = "ui")]
+    pub last_down_right: bool,
+    /// Characters typed into the window, delivered by minifb's input callback
+    /// (which owns a clone of this Arc) and drained on every harvest. The
+    /// callback is the only source of real characters — `get_keys_pressed`
+    /// reports raw `Key`s with no layout/shift translation.
+    #[cfg(feature = "ui")]
+    pub pending_chars: std::sync::Arc<std::sync::Mutex<Vec<u32>>>,
     /// Last reported mouse position, so a move event fires only when the
     /// position actually changes. minifb re-reports the same position on
     /// every poll; pushing it unconditionally makes the event queue
@@ -106,6 +115,10 @@ impl Default for HostUi {
             win_h: 0,
             #[cfg(feature = "ui")]
             last_down: false,
+            #[cfg(feature = "ui")]
+            last_down_right: false,
+            #[cfg(feature = "ui")]
+            pending_chars: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             #[cfg(feature = "ui")]
             last_pos: None,
             #[cfg(feature = "ui")]
@@ -221,10 +234,13 @@ impl HostUi {
                 eprintln!("ui: creating {w}x{h} minifb window...");
             }
             match Window::new("smallishtalk", w, h, WindowOptions::default()) {
-                Ok(win) => {
+                Ok(mut win) => {
                     if self.verbose {
                         eprintln!("ui: window created ({w}x{h})");
                     }
+                    // Typed characters land in pending_chars; harvest drains
+                    // them into key events (see ingest_window_state).
+                    win.set_input_callback(Box::new(CharSink(self.pending_chars.clone())));
                     self.window = Some(win);
                     self.win_w = self.buf_width;
                     self.win_h = self.buf_height;
@@ -264,18 +280,28 @@ impl HostUi {
         use minifb::{Key, MouseButton, MouseMode};
         // Snapshot everything off the window, then mutate our own fields (avoids
         // borrowing the window and the event queue at once).
-        let Some((open, esc, pos, down, keys)) = self.window.as_ref().map(|win| {
+        let Some((open, esc, pos, down, down_right, keys)) = self.window.as_ref().map(|win| {
             (
                 win.is_open(),
                 win.is_key_down(Key::Escape),
                 win.get_mouse_pos(MouseMode::Discard),
                 win.get_mouse_down(MouseButton::Left),
+                win.get_mouse_down(MouseButton::Right),
                 win.get_keys_pressed(minifb::KeyRepeat::No),
             )
         }) else {
             return;
         };
-        self.ingest_window_state(open, esc, pos.map(|(x, y)| (x as i64, y as i64)), down, keys);
+        let chars = std::mem::take(&mut *self.pending_chars.lock().unwrap());
+        self.ingest_window_state(
+            open,
+            esc,
+            pos.map(|(x, y)| (x as i64, y as i64)),
+            down,
+            down_right,
+            keys,
+            chars,
+        );
     }
 
     /// Turn one window-state snapshot into queued events. Split from the
@@ -283,15 +309,19 @@ impl HostUi {
     /// window. THE contract: identical consecutive snapshots (which is what
     /// minifb reports between updates) must eventually enqueue NOTHING —
     /// primNextEvent harvests on every call, so any state re-reported as an
-    /// event makes the image's drain-until-empty pump spin forever.
+    /// event makes the image's drain-until-empty pump spin forever. `chars`
+    /// is exempt: it is the drained callback buffer, edge-y by construction.
     #[cfg(feature = "ui")]
+    #[allow(clippy::too_many_arguments)]
     fn ingest_window_state(
         &mut self,
         open: bool,
         esc: bool,
         pos: Option<(i64, i64)>,
         down: bool,
+        down_right: bool,
         keys: Vec<minifb::Key>,
+        chars: Vec<u32>,
     ) {
         if !open || esc {
             if self.close_sent {
@@ -313,17 +343,49 @@ impl HostUi {
                 self.last_pos = Some((x, y));
             }
             // Only on a press/release edge, so a held button doesn't re-fire.
+            // Slot c is the button number: 1 left, 2 right (Event>>buttons).
             if down != self.last_down {
                 self.events.push_back([EV_MOUSE_BUTTON, x, y, 1, down as i64]);
                 self.last_down = down;
             }
+            if down_right != self.last_down_right {
+                self.events.push_back([EV_MOUSE_BUTTON, x, y, 2, down_right as i64]);
+                self.last_down_right = down_right;
+            }
         }
         for key in &keys {
             if !self.last_keys.contains(key) {
-                self.events.push_back([EV_KEY_DOWN, *key as i64, 0, 0, 0]);
+                // Editing keys never reach the char callback, so translate
+                // them here into the control codes TextPane understands.
+                let ch = match key {
+                    minifb::Key::Backspace => 8,
+                    minifb::Key::Enter => 10,
+                    _ => 0,
+                };
+                self.events.push_back([EV_KEY_DOWN, *key as i64, 0, ch, 0]);
             }
         }
         self.last_keys = keys;
+        for ch in chars {
+            // Printables only: control chars (some platforms do send them
+            // here) are covered by the key path above.
+            if ch >= 32 && ch != 127 {
+                self.events.push_back([EV_KEY_DOWN, 0, 0, ch as i64, 0]);
+            }
+        }
+    }
+}
+
+/// The minifb input callback: appends each typed character to the shared
+/// buffer `harvest_window` drains. (A separate type because the callback
+/// must be boxed and `'static`, so it can't borrow HostUi.)
+#[cfg(feature = "ui")]
+struct CharSink(std::sync::Arc<std::sync::Mutex<Vec<u32>>>);
+
+#[cfg(feature = "ui")]
+impl minifb::InputCallback for CharSink {
+    fn add_char(&mut self, uni_char: u32) {
+        self.0.lock().unwrap().push(uni_char);
     }
 }
 
@@ -343,33 +405,102 @@ mod tests {
     /// The invariant primNextEvent's drain loop depends on: re-reporting an
     /// unchanged window snapshot (what minifb does between updates) enqueues
     /// nothing after the first harvest. Each regression here was a live hang.
+    /// (Chars are exempt by construction — the callback buffer is drained.)
     #[test]
     fn repeated_identical_snapshots_quiesce() {
         let mut ui = HostUi::new();
-        ui.ingest_window_state(true, false, Some((10, 20)), true, vec![Key::A, Key::B]);
+        ui.ingest_window_state(true, false, Some((10, 20)), true, true, vec![Key::A, Key::B], vec![]);
         let first = drain(&mut ui);
         assert_eq!(
             first,
             vec![
                 [EV_MOUSE_MOVE, 10, 20, 0, 0],
                 [EV_MOUSE_BUTTON, 10, 20, 1, 1],
+                [EV_MOUSE_BUTTON, 10, 20, 2, 1],
                 [EV_KEY_DOWN, Key::A as i64, 0, 0, 0],
                 [EV_KEY_DOWN, Key::B as i64, 0, 0, 0],
             ]
         );
         for _ in 0..3 {
-            ui.ingest_window_state(true, false, Some((10, 20)), true, vec![Key::A, Key::B]);
+            ui.ingest_window_state(
+                true,
+                false,
+                Some((10, 20)),
+                true,
+                true,
+                vec![Key::A, Key::B],
+                vec![],
+            );
             assert_eq!(drain(&mut ui), Vec::<HostEvent>::new());
         }
+    }
+
+    /// The right button reports as button 2 in slot c, with the same
+    /// edge-only discipline as the left — this is what the Workspace's
+    /// right-click operate menu rides on.
+    #[test]
+    fn right_button_fires_edges_as_button_2() {
+        let mut ui = HostUi::new();
+        ui.ingest_window_state(true, false, Some((5, 6)), false, true, vec![], vec![]);
+        assert_eq!(
+            drain(&mut ui),
+            vec![
+                [EV_MOUSE_MOVE, 5, 6, 0, 0],
+                [EV_MOUSE_BUTTON, 5, 6, 2, 1],
+            ]
+        );
+        ui.ingest_window_state(true, false, Some((5, 6)), false, false, vec![], vec![]);
+        assert_eq!(drain(&mut ui), vec![[EV_MOUSE_BUTTON, 5, 6, 2, 0]]);
+    }
+
+    /// Typed characters (the window's char callback) become key-down events
+    /// carrying the character in slot c — what TextPane inserts. Control
+    /// chars are dropped here; backspace/enter arrive as keys instead.
+    #[test]
+    fn chars_become_key_events_with_the_char_in_c() {
+        let mut ui = HostUi::new();
+        ui.ingest_window_state(true, false, Some((0, 0)), false, false, vec![], vec![104, 7, 105]);
+        assert_eq!(
+            drain(&mut ui),
+            vec![
+                [EV_MOUSE_MOVE, 0, 0, 0, 0],
+                [EV_KEY_DOWN, 0, 0, 104, 0],
+                [EV_KEY_DOWN, 0, 0, 105, 0],
+            ]
+        );
+    }
+
+    /// Backspace and Enter never come through the char callback, so their
+    /// key events carry the control codes (8, 10) TextPane understands.
+    #[test]
+    fn editing_keys_carry_their_control_codes() {
+        let mut ui = HostUi::new();
+        ui.ingest_window_state(
+            true,
+            false,
+            Some((0, 0)),
+            false,
+            false,
+            vec![Key::Backspace, Key::Enter],
+            vec![],
+        );
+        assert_eq!(
+            drain(&mut ui),
+            vec![
+                [EV_MOUSE_MOVE, 0, 0, 0, 0],
+                [EV_KEY_DOWN, Key::Backspace as i64, 0, 8, 0],
+                [EV_KEY_DOWN, Key::Enter as i64, 0, 10, 0],
+            ]
+        );
     }
 
     #[test]
     fn changes_fire_as_edges() {
         let mut ui = HostUi::new();
-        ui.ingest_window_state(true, false, Some((10, 20)), true, vec![Key::A]);
+        ui.ingest_window_state(true, false, Some((10, 20)), true, false, vec![Key::A], vec![]);
         drain(&mut ui);
         // Move, release, new key; A held over from last time must not re-fire.
-        ui.ingest_window_state(true, false, Some((11, 20)), false, vec![Key::A, Key::C]);
+        ui.ingest_window_state(true, false, Some((11, 20)), false, false, vec![Key::A, Key::C], vec![]);
         assert_eq!(
             drain(&mut ui),
             vec![
@@ -379,9 +510,9 @@ mod tests {
             ]
         );
         // A released then re-pressed fires again.
-        ui.ingest_window_state(true, false, Some((11, 20)), false, vec![]);
+        ui.ingest_window_state(true, false, Some((11, 20)), false, false, vec![], vec![]);
         drain(&mut ui);
-        ui.ingest_window_state(true, false, Some((11, 20)), false, vec![Key::A]);
+        ui.ingest_window_state(true, false, Some((11, 20)), false, false, vec![Key::A], vec![]);
         assert_eq!(drain(&mut ui), vec![[EV_KEY_DOWN, Key::A as i64, 0, 0, 0]]);
     }
 
@@ -390,10 +521,10 @@ mod tests {
         for esc in [false, true] {
             let mut ui = HostUi::new();
             let open = esc; // closed-window in one case, escape in the other
-            ui.ingest_window_state(open, esc, None, false, Vec::new());
+            ui.ingest_window_state(open, esc, None, false, false, Vec::new(), Vec::new());
             assert_eq!(drain(&mut ui), vec![[EV_CLOSE, 0, 0, 0, 0]]);
             for _ in 0..3 {
-                ui.ingest_window_state(open, esc, None, false, Vec::new());
+                ui.ingest_window_state(open, esc, None, false, false, Vec::new(), Vec::new());
                 assert_eq!(drain(&mut ui), Vec::<HostEvent>::new());
             }
         }

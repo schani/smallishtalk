@@ -82,10 +82,13 @@ cross-compiles a UI image and runs it:
 ```sh
 make ui            # headless: renders the Class Browser to ./ui-screenshot.png
 make ui-window     # a live, click-navigable window (needs the `ui` feature + a display)
+make ui-workspace  # a live Workspace window: type to edit, drag to select,
+                   # right-click the selection for "do it" / "print it"
 ```
 
 (`make ui` needs a Rust toolchain and `gst`; it opens no window, so it works
-over SSH and in CI. `scripts/run-ui.sh [--window]` is the underlying script.)
+over SSH and in CI. `scripts/run-ui.sh [--window|--workspace]` is the
+underlying script.)
 
 Under the hood, a UI image bundles the kernel, the compiler (for live compilation) and the UI
 layers, plus a driver program of ordinary Smalltalk. Build one and run it:
