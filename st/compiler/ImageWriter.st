@@ -323,12 +323,16 @@ classScopeFor: aName classSide: isMeta
 	^StClassScope name: aName instVarNames: (self allInstVarNamesOf: d)!
 
 addMethodSource: source toClass: aName classSide: isMeta
+	^self addMethodSource: source toClass: aName classSide: isMeta protocol: nil!
+
+addMethodSource: source toClass: aName classSide: isMeta protocol: aProtocol
 	| d spec obj |
 	d := self findClass: aName.
 	d isNil ifTrue: [self error: 'unknown class ' , aName].
 	spec := StCodeGen compileMethodSource: source
 		inClass: (self classScopeFor: aName classSide: isMeta).
-	obj := self materializeMethod: spec forClassDesc: d classSide: isMeta source: source.
+	obj := self materializeMethod: spec forClassDesc: d classSide: isMeta
+		source: source protocol: aProtocol.
 	isMeta
 		ifTrue: [
 			d classMethodSelectors add: spec selector.
@@ -346,6 +350,10 @@ materializeMethod: spec forClassDesc: d classSide: isMeta
 	^self materializeMethod: spec forClassDesc: d classSide: isMeta source: nil!
 
 materializeMethod: spec forClassDesc: d classSide: isMeta source: src
+	^self materializeMethod: spec forClassDesc: d classSide: isMeta
+		source: src protocol: nil!
+
+materializeMethod: spec forClassDesc: d classSide: isMeta source: src protocol: proto
 	| m header |
 	m := self addObj: (StObj fixed: Treaty classCompiledmethod slots: Treaty methodNumSlots).
 	header := self packHeaderFor: spec.
@@ -359,9 +367,20 @@ materializeMethod: spec forClassDesc: d classSide: isMeta source: src
 		put: (d isNil
 			ifTrue: [nilObj]
 			ifFalse: [isMeta ifTrue: [d metaObj] ifFalse: [d classObj]]).
-	m at: Treaty methodSourceInfo + 1
-		put: (src isNil ifTrue: [nilObj] ifFalse: [self stringFor: src]).
+	m at: Treaty methodSourceInfo + 1 put: (self sourceInfoFor: src protocol: proto).
 	^m!
+
+sourceInfoFor: src protocol: proto
+	"the METHOD_SOURCE_INFO slot value: nil, the bare source string, or —
+	 when the methodsFor: protocol is known — an Array of (source protocol),
+	 the shape CompiledMethod>>sourceString/protocol read back (UI.md §9)."
+	| info |
+	proto isNil ifTrue: [
+		^src isNil ifTrue: [nilObj] ifFalse: [self stringFor: src]].
+	info := self addObj: (StObj ptrs: Treaty classArray slots: 2).
+	info at: 1 put: (src isNil ifTrue: [nilObj] ifFalse: [self stringFor: src]).
+	info at: 2 put: (self symbolFor: proto).
+	^info!
 
 materializeBlock: spec outer: outerObj classDesc: d classSide: isMeta
 	| b info |
