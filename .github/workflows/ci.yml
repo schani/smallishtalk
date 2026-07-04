@@ -1,0 +1,37 @@
+# Run the full test suite (`make test`) on every push to main and every PR:
+# the Rust/VM tests, the in-image Smalltalk suite, the bootstrap fixpoint,
+# and the GST-hosted compiler suites.
+#
+# No marketplace actions (`uses:`), only `run:` steps. Marketplace actions
+# are JavaScript executed by the runner's Node — a moving runtime we don't
+# otherwise depend on (this repo's build needs exactly: git, rust, gst).
+# Checkout is two git commands; a cargo cache isn't worth a dependency for
+# the ~1-2 min it would save.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Pinned to ubuntu-22.04 (jammy), NOT ubuntu-latest: the tests need the
+    # GNU Smalltalk 3.2.5 cross-compiler, and the gnu-smalltalk package was
+    # dropped from Debian/Ubuntu after jammy.
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out the commit under test
+        # For a push, $GITHUB_REF is the branch ref; for a PR it is the
+        # refs/pull/N/merge ref — both directly fetchable.
+        run: |
+          git init .
+          git fetch --depth 1 https://github.com/${{ github.repository }} ${{ github.ref }}
+          git checkout FETCH_HEAD
+      - name: Install GNU Smalltalk
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnu-smalltalk
+          gst --version
+      - name: Run all tests
+        run: make test

@@ -777,6 +777,9 @@ primBitblt
 primSaveForm
 	"primitives::PRIM_SAVE_FORM"
 	^333!
+primPostEvent
+	"primitives::PRIM_POST_EVENT"
+	^334!
 primSnapshot
 	"primitives::PRIM_SNAPSHOT"
 	^400!

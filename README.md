@@ -1,5 +1,7 @@
 # smallishtalk
 
+[![CI](https://github.com/schani/smallishtalk/actions/workflows/ci.yml/badge.svg)](https://github.com/schani/smallishtalk/actions/workflows/ci.yml)
+
 A complete implementation of [SPEC.md](SPEC.md): the Rust VM (**interpreter
 only, no JIT**) *and* the Smalltalk-side compiler with its GNU Smalltalk
 bootstrap, through the spec's Phase 5 — the compiler self-hosts on the VM
@@ -14,9 +16,16 @@ and its output is bit-identical to the GST cross-compile.
 
 ```sh
 cargo build --release          # the `smallishtalk` VM binary
-cargo test                     # the full Rust suite (VM, GC, corpus, self-host)
-./run-st-tests.sh              # the compiler's GNU Smalltalk SUnit suites
+make test                      # ALL tests (what CI runs)
 ```
+
+`make test` = `cargo test` (the Rust/VM suite, the corpus, self-hosting +
+the bootstrap fixpoint, and the in-image Smalltalk suite) +
+`./run-st-tests.sh` (the compiler's GNU Smalltalk SUnit suites). Tests
+whose subject is in-image behavior are themselves written in Smalltalk:
+`st/tests/ui/` holds a minimal in-image SUnit (`Harness.st`) plus the
+graphics/WM/widget/reflection/browser suites, run on the VM by the
+in-image `TestRunner` and launched by `cargo test --test st_suite`.
 
 **Run an image** — the VM loads a STIM image and runs its active process:
 
@@ -109,7 +118,9 @@ installs it **live**; `Smalltalk evaluate: '3 + 4'` is a do-it.
 
 - Regenerate the baked-in font: `python3 st/tools/gen_font_bdf.py st/ui/gfx/helvR12.bdf > st/ui/gfx/DefaultFont.st`.
 - Optional real window (first external dep, `minifb`): `cargo run --features ui -- --ui /tmp/ui.im`.
-- Headless UI tests: `cargo test --test ui_headless --test ui_gfx --test ui_wm --test ui_widgets --test ui_reflection --test ui_browser`.
+- Headless UI tests: `cargo test --test ui_headless --test st_suite` — the
+  host seam is tested in Rust; everything above it (graphics, WM, widgets,
+  reflection, browser) is in-image Smalltalk tests in `st/tests/ui/`.
 
 ## The two codebases
 
@@ -137,7 +148,11 @@ with tests holding all three together.
    (compiled by our own codegen). Running it, the in-image compiler
    compiles the entire corpus and the kernel **bit-identically** to GST's
    output — and compiles *itself* bit-identically, with the resulting
-   third-generation image running correctly.
+   third-generation image running correctly. `tests/bootstrap_test.rs`
+   closes the loop as a fixpoint: S0 (the compiler compiled by GST), S1
+   (compiled by S0) and S2 (compiled by S1) are asserted **bit-identical**,
+   using a self-replicating driver so every generation builds from exactly
+   the same bytes.
 
 The portable-dialect divergences between GST and the self-hosted kernel
 are confined to `st/compiler/Compat.st` (GST side: `charAt:`, `byteAt:`,
@@ -174,7 +189,7 @@ file-in requires it; `tests/portability_guard_test.rs` enforces it).
 | `src/counters.rs` | plan §3 | Exact VM counters: always-on slow-path tier + gated hot-path tier (`SMALLISHTALK_STATS=1`, `SMALLISHTALK_GATE=1`) |
 | `src/profile.rs` | plan §2 | The sampling profiler: timer thread → safepoint samples, GC/prim pseudo-frames, epoch-keyed symbolization; driven from Smalltalk via `Profiler spy: [...]` (prims 420–426) |
 
-`cargo test` runs the whole Phase-1-style suite (137 tests): per-opcode
+`cargo test` runs the whole Phase-1-style suite: per-opcode
 interpreter tests, GC unit + stress tests, closure/NLR batteries, an
 exception battery driven by a hand-assembled in-image exception kernel,
 process/scheduler tests, and snapshot round-trips that resume mid-method.

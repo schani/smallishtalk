@@ -1,6 +1,8 @@
 "Build a UI image (UI.md M1): kernel + the L2 graphics layer + a driver
  program -> STIM image. Files are loaded top-to-bottom in dependency order.
- Args: programPath outPath. Run from the project root (paths are cwd-relative,
+ Args: programPath outPath [extraSource.st ...] — extras are filed in after
+ the UI layer, before the program (the in-image test suite is layered on this
+ way, see st/tests/ui/). Run from the project root (paths are cwd-relative,
  like build_selfhost_image.st)."
 | b |
 b := StImageBuilder new.
@@ -40,6 +42,8 @@ b fileInFile: 'st/ui/widgets/MenuPane.st'.
 b fileInFile: 'st/ui/widgets/ScrollBar.st'.
 b fileInFile: 'st/ui/apps/ClassBrowser.st'.
 b fileInFile: 'st/ui/apps/Workspace.st'.
+3 to: Smalltalk arguments size do: [:i |
+	b fileInFile: (Smalltalk getArgv: i)].
 b programSource: (Platform readFile: (Smalltalk getArgv: 1)).
 b writeTo: (Smalltalk getArgv: 2).
 Transcript showCr: 'IMAGE-WRITTEN'.

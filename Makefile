@@ -1,3 +1,11 @@
+# Run ALL tests (what CI runs). `cargo test` covers the Rust/VM tests, the
+# in-image Smalltalk suite (tests/st_suite.rs launches st/tests/ui/ on the
+# VM), and the bootstrap fixpoint (tests/bootstrap_test.rs); run-st-tests.sh
+# runs the GST-hosted compiler suites (st/tests/) under GNU Smalltalk.
+test:
+	cargo test
+	./run-st-tests.sh
+
 # Benchmarks (docs/profiling-plan.md §5): release build, warmup + median-of-5,
 # GST ratio column, history in bench/history.csv, counter tables in
 # bench/results/. Run a subset with: make bench BENCH_ARGS="send_loop"
@@ -13,4 +21,4 @@ ui:
 ui-window:
 	bash scripts/run-ui.sh --window
 
-.PHONY: bench ui ui-window
+.PHONY: test bench ui ui-window

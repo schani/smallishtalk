@@ -26,6 +26,13 @@ fromArray: arr
 	e setType: (arr at: 1) a: (arr at: 2) b: (arr at: 3) c: (arr at: 4) d: (arr at: 5).
 	^e! !
 
+!Event class methodsFor: 'posting'!
+postType: t a: aa b: bb c: cc d: dd
+	"push a scripted event onto the host queue (primitive 334) — the same
+	 pipeline real devices feed; lets in-image tests drive pumpEvents."
+	<primitive: 334>
+	^self primitiveFailed: #postType:a:b:c:d:! !
+
 !Event methodsFor: 'initializing'!
 setType: t a: aa b: bb c: cc d: dd
 	type := t.
