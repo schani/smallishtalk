@@ -40,6 +40,13 @@ sourceString
 	info isNil ifTrue: [^nil].
 	(info isKindOf: Array) ifTrue: [^info at: 1].
 	^info!
+protocol
+	"the source-declared methodsFor: protocol the image writer recorded in
+	 the source-info Array, or nil (live-compiled / no-source methods)."
+	| info |
+	info := self sourceInfo.
+	(info isKindOf: Array) ifTrue: [^info at: 2].
+	^nil!
 methodSelector
 	^self instVarAt: 5! !
 
@@ -89,7 +96,7 @@ compile: sourceString classified: aProtocol
 	method := RuntimeCompiler compile: sourceString in: self.
 	selector := method methodSelector.
 	self installSelector: selector method: method.
-	method instVarAt: 7 put: sourceString.
+	method instVarAt: 7 put: (Array with: sourceString with: aProtocol).
 	Smalltalk organization classify: selector under: aProtocol for: self.
 	^selector! !
 
@@ -174,7 +181,16 @@ protocolKeyFor: aClass selector: aSelector
 	^Array with: aClass with: aSelector!
 protocolOf: aClass selector: aSelector
 	^self protocolsDict at: (self protocolKeyFor: aClass selector: aSelector)
-		ifAbsent: [#unclassified]!
+		ifAbsent: [self defaultProtocolOf: aClass selector: aSelector]!
+defaultProtocolOf: aClass selector: aSelector
+	"the method's source-declared methodsFor: protocol, recorded by the
+	 image writer in the method's source-info slot."
+	| m p |
+	m := aClass compiledMethodAt: aSelector.
+	m notNil ifTrue: [
+		p := m protocol.
+		p notNil ifTrue: [^p]].
+	^#unclassified!
 classify: aSelector under: aProtocol for: aClass
 	self protocolsDict at: (self protocolKeyFor: aClass selector: aSelector)
 		put: aProtocol!

@@ -16,7 +16,7 @@ testBrowserNavigatesTheReflectionModel
 	"the 'Collections' category comes from the class definitions in
 	 kernel.st (the SystemClassCategories table — no manual classify:);
 	 class lists are alphabetical, so Array is first. Array's own methods
-	 default to 'unclassified'; printString source is retained."
+	 sit in the source-declared 'printing' protocol; source is retained."
 	| b |
 	b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 240 y: 120)).
 	self assert: (b categoryNames includes: 'Collections').
@@ -25,8 +25,8 @@ testBrowserNavigatesTheReflectionModel
 	self assert: (b classNames at: 1) equals: 'Array'.
 	self assert: (b classNames includes: 'String').
 	b selectClassNamed: 'Array'.
-	self assert: (b protocolNames includes: 'unclassified').
-	b selectProtocolNamed: 'unclassified'.
+	self assert: (b protocolNames includes: 'printing').
+	b selectProtocolNamed: 'printing'.
 	self assert: (b selectorNames includes: 'printString').
 	b selectSelectorNamed: 'printString'.
 	self assert: b sourcePane contents size > 0.
@@ -39,7 +39,7 @@ testBrowserAcceptRecompilesLive
 	b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 240 y: 120)).
 	b selectCategoryNamed: 'Collections'.
 	b selectClassNamed: 'Array'.
-	b selectProtocolNamed: 'unclassified'.
+	b selectProtocolNamed: 'printing'.
 	b sourcePane contents: 'uiBrowserAccept ^777'.
 	b accept.
 	self assert: (Array new: 3) uiBrowserAccept equals: 777.
@@ -83,7 +83,7 @@ testBrowserOpensAndScreenshotsTheFullStack
 	b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 320 y: 200)).
 	b selectCategoryNamed: 'Kernel'.
 	b selectClassNamed: 'Object'.
-	b selectProtocolNamed: 'unclassified'.
+	b selectProtocolNamed: 'accessing'.
 	b selectSelectorNamed: 'yourself'.
 	f := Form width: 320 height: 200.
 	b displayOn: (Canvas on: f).
@@ -152,13 +152,17 @@ testBrowserShowsPlaceholderForUnretainedSource
 	"selecting a selector whose method kept no source (kernel methods built
 	 by the no-source materializers answer nil from sourceCodeAt:) must show
 	 a note in the source pane, not crash the pane on nil."
-	| b sel m |
+	| b sel m info |
 	b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 240 y: 120)).
 	b selectCategoryNamed: 'Collections'.
 	b selectClassNamed: 'Array'.
 	b selectProtocolNamed: (b protocolNames at: 1).
 	sel := b selectorNames at: 1.
 	m := b currentClass compiledMethodAt: sel asSymbol.
+	info := m instVarAt: 7.
 	m instVarAt: 7 put: nil.
 	b selectSelectorNamed: sel.
-	self assert: b sourcePane contents equals: '"no source retained for ' , sel , '"'! !
+	self assert: b sourcePane contents equals: '"no source retained for ' , sel , '"'.
+	"restore: the slot also carries the source-declared protocol, and the
+	 suite shares one image"
+	m instVarAt: 7 put: info! !

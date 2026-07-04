@@ -632,9 +632,12 @@ Two enablers, needed before a *live* browser can exist.
   writer records each `category:` from the class-definition chunks in a
   `SystemClassCategories` global (an Array parallel to `SystemClassList`,
   indexed by classIndex) and `SystemOrganization` falls back to it (then to
-  `'Kernel'`); protocol defaults to `#unclassified` until
-  `compile:classified:` files a method. Category, class, protocol, and
-  selector lists come back alphabetically sorted.
+  `'Kernel'`); a method's protocol is likewise its **source-declared**
+  `methodsFor:` group — the image writer stores it (with the source) in the
+  method's source-info `Array` (§9.1) and `SystemOrganization` falls back to
+  `CompiledMethod>>protocol` (then to `#unclassified`, e.g. for `startUp`).
+  `compile:classified:` overrides via the side dictionary. Category, class,
+  protocol, and selector lists come back alphabetically sorted.
 
 ### 9.3 Live compile / accept
 ```
@@ -855,8 +858,10 @@ are the invariant we design against now.)
    storing source out-of-line if it bites.
 5. **Category/protocol metadata.** *(resolved)* Class categories are the
    source-declared ones, carried through the image writer as the
-   `SystemClassCategories` table (§9.2); protocols grow via
-   `compile:classified:`.
+   `SystemClassCategories` table (§9.2); method protocols are the
+   source-declared `methodsFor:` groups, carried in each method's source-info
+   `Array` (§9.1), with `compile:classified:` overriding via the side
+   dictionary.
 6. **Font licensing.** *(resolved)* The embedded strike is Adobe Helvetica
    Medium 12 from the X11 75dpi BDF collection (`st/ui/gfx/helvR12.bdf`),
    under the permissive Adobe/DEC notice embedded in the BDF; provenance is

@@ -32,7 +32,8 @@ fileInSource: chunkText
 			(ev at: 5) do: [:src |
 				writer addMethodSource: src
 					toClass: (ev at: 2)
-					classSide: (ev at: 3)]]]!
+					classSide: (ev at: 3)
+					protocol: (ev at: 4)]]]!
 
 fileInFile: aPath
 	self fileInSource: (Platform readFile: aPath)!
