@@ -125,6 +125,29 @@ testBrowserClickNavigates
 	self deny: b currentClass isNil.
 	self assert: b currentClass name asString equals: 'Array'.
 	self deny: b protocolNames isEmpty!
+testBrowserThumbDragIsCapturedAcrossPanes
+	"a real drag through the event queue: press on the category pane's
+	 scroll thumb (x[54,60) of the 240-wide browser), drag down-right until
+	 the pointer is over the protocol pane, release. The browser captures
+	 the mouse on the down, so the moves keep scrolling the category list —
+	 selecting nothing — until the up releases capture."
+	| d b s pane |
+	d := Display width: 240 height: 120.
+	b := ClassBrowser bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 240 y: 120)).
+	s := UISupervisor on: d.
+	s rootView: b.
+	pane := b categoryPane.
+	self assert: pane needsScrollBar.
+	self assert: pane topIndex equals: 1.
+	Event postType: 2 a: 56 b: 3 c: 1 d: 1.
+	Event postType: 1 a: 150 b: 40 c: 0 d: 0.
+	s pumpEvents.
+	self assert: pane isDraggingThumb.
+	self assert: pane topIndex > 1.
+	self assert: pane selectionIndex equals: 0.
+	Event postType: 2 a: 150 b: 40 c: 1 d: 0.
+	s pumpEvents.
+	self deny: pane isDraggingThumb!
 testBrowserShowsPlaceholderForUnretainedSource
 	"selecting a selector whose method kept no source (kernel methods built
 	 by the no-source materializers answer nil from sourceCodeAt:) must show

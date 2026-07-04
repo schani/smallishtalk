@@ -4,7 +4,7 @@
  keyboard navigation. `onSelect` is a one-arg block fired on selection change."
 
 View subclass: #ListPane
-	instanceVariableNames: 'items selection topIndex onSelect scrollBar'
+	instanceVariableNames: 'items selection topIndex onSelect scrollBar dragOffset'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'UI-Widgets'!
@@ -64,13 +64,26 @@ scrollBar
 maxTopIndex
 	^(items size - self visibleRows + 1) max: 1!
 scrollBarClickAt: aPoint
-	"jump-scroll: the click's fraction of the bar becomes topIndex, so
-	 clicking the bottom shows the last page. Selection is untouched."
-	| t |
+	"a press on the thumb grabs it where pressed (no jump); a press in the
+	 trough jumps there, centering the thumb under the pointer. Either way
+	 the thumb is grabbed: mouse moves drag it until mouse-up releases it
+	 (handleEvent). Selection is untouched."
+	| thumb |
 	items isEmpty ifTrue: [^true].
-	t := (aPoint y - bounds top) * items size // (bounds height max: 1) + 1.
-	topIndex := (t min: self maxTopIndex) max: 1.
-	^true! !
+	thumb := self scrollBar thumbRect.
+	(aPoint y >= thumb top and: [aPoint y < thumb bottom])
+		ifTrue: [dragOffset := aPoint y - thumb top]
+		ifFalse: [
+			dragOffset := thumb height // 2.
+			self dragThumbTo: aPoint y].
+	^true!
+dragThumbTo: y
+	"scroll so the grabbed point of the thumb sits at y."
+	| t |
+	t := (y - dragOffset - bounds top) * items size // (bounds height max: 1) + 1.
+	topIndex := (t min: self maxTopIndex) max: 1!
+isDraggingThumb
+	^dragOffset notNil! !
 
 !ListPane methodsFor: 'selecting'!
 select: anIndex
@@ -127,5 +140,11 @@ displayOn: aCanvas
 
 !ListPane methodsFor: 'events'!
 handleEvent: anEvent
+	"rows select on mouse-down; the scroll-bar strip arms a thumb drag that
+	 tracks mouse moves (even outside the pane — the browser captures the
+	 mouse for us) until mouse-up releases it."
 	anEvent isMouseDown ifTrue: [^self selectAtPoint: anEvent position].
+	(anEvent isMouseMove and: [dragOffset notNil])
+		ifTrue: [self dragThumbTo: anEvent position y. ^true].
+	anEvent isMouseUp ifTrue: [dragOffset := nil].
 	^false! !

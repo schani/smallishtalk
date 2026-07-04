@@ -115,6 +115,37 @@ testListPaneScrollBarScrollsWithoutSelecting
 	lp items: (Array with: 'a' with: 'b').
 	self deny: lp needsScrollBar.
 	self assert: lp contentRight equals: 40!
+testListPaneThumbDragScrolls
+	"pressing ON the thumb grabs it without jumping; mouse moves then drag
+	 it — the pane tracks y wherever the pointer is, capture is the
+	 router's job — and mouse-up releases it, so later moves do nothing."
+	| lp items e |
+	items := OrderedCollection new.
+	1 to: 10 do: [:k | items add: 'item' , k printString].
+	lp := ListPane bounds: (Rectangle left: 0 top: 0 right: 40 bottom: 32).
+	lp items: items.
+	lp select: 1.
+	"the thumb is y[0,6): a press at y=2 grabs it, no jump"
+	e := Event fromArray: (Array with: 2 with: 36 with: 2 with: 1 with: 1).
+	self assert: (lp handleEvent: e).
+	self assert: lp topIndex equals: 1.
+	self assert: lp isDraggingThumb.
+	"drag to y=18: topIndex = (18-2)*10//32+1 = 6; selection untouched"
+	e := Event fromArray: (Array with: 1 with: 36 with: 18 with: 0 with: 0).
+	self assert: (lp handleEvent: e).
+	self assert: lp topIndex equals: 6.
+	self assert: lp selectionIndex equals: 1.
+	"dragging way past the bottom clamps to the last page"
+	e := Event fromArray: (Array with: 1 with: 10 with: 60 with: 0 with: 0).
+	lp handleEvent: e.
+	self assert: lp topIndex equals: 9.
+	"release: the next move no longer scrolls"
+	e := Event fromArray: (Array with: 2 with: 10 with: 60 with: 1 with: 0).
+	lp handleEvent: e.
+	self deny: lp isDraggingThumb.
+	e := Event fromArray: (Array with: 1 with: 36 with: 2 with: 0 with: 0).
+	self deny: (lp handleEvent: e).
+	self assert: lp topIndex equals: 9!
 testScrollBarThumbTracksPosition
 	| sb |
 	sb := ScrollBar bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 5 y: 100)).

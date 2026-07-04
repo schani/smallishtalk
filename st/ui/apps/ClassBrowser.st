@@ -7,7 +7,7 @@
  operate it by name; the same selections fire when a real click hits a pane."
 
 View subclass: #ClassBrowser
-	instanceVariableNames: 'categoryPane classPane protocolPane selectorPane sourcePane classObjects selectorObjects currentCategory currentClass currentProtocol currentSelector lastResult'
+	instanceVariableNames: 'categoryPane classPane protocolPane selectorPane sourcePane classObjects selectorObjects currentCategory currentClass currentProtocol currentSelector lastResult mouseFocus'
 	classVariableNames: ''
 	poolDictionaries: ''
 	category: 'UI-Apps'!
@@ -51,6 +51,8 @@ layoutPanes
 !ClassBrowser methodsFor: 'accessing'!
 sourcePane
 	^sourcePane!
+categoryPane
+	^categoryPane!
 categoryNames
 	^categoryPane items!
 classNames
@@ -155,12 +157,21 @@ printIt
 !ClassBrowser methodsFor: 'events'!
 handleEvent: anEvent
 	"route a click to the list/source pane under the pointer (which selects,
-	 firing navigation); route keystrokes to the source pane."
-	| target |
+	 firing navigation); route keystrokes to the source pane. Mouse-down
+	 CAPTURES the pane: moves and the release go to it wherever the pointer
+	 wanders (that's what makes scroll-thumb drags survive leaving the
+	 strip), and mouse-up releases the capture."
+	| target handled |
 	anEvent isKeystroke ifTrue: [^sourcePane handleEvent: anEvent].
 	(anEvent isMouseButton or: [anEvent isMouseMove]) ifTrue: [
+		mouseFocus notNil ifTrue: [
+			handled := mouseFocus handleEvent: anEvent.
+			anEvent isMouseUp ifTrue: [mouseFocus := nil].
+			^handled].
 		target := self viewAt: anEvent position.
-		(target notNil and: [target ~~ self]) ifTrue: [^target handleEvent: anEvent]].
+		(target notNil and: [target ~~ self]) ifTrue: [
+			anEvent isMouseDown ifTrue: [mouseFocus := target].
+			^target handleEvent: anEvent]].
 	^false! !
 
 !ClassBrowser methodsFor: 'drawing'!

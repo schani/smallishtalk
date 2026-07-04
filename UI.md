@@ -580,8 +580,11 @@ extend.
   browser's operate menus) returning the chosen command symbol.
 - **`ScrollBar`** — thin, attaches to `ListPane`/`TextPane`. `ListPane` builds
   one in automatically when its items overflow: a 6-px strip on the right edge
-  with a proportional thumb; a click in the strip jump-scrolls to that
-  fraction of the list without changing the selection.
+  with a proportional thumb. Pressing the thumb grabs it and mouse moves drag
+  it until release; pressing the trough jumps there first, then drags. The
+  `ClassBrowser` captures the mouse on any pane press, so a drag keeps
+  scrolling even when the pointer leaves the strip; the selection is never
+  touched by scrolling.
 
 All render through `Canvas` (§5.6) and the `StrikeFont`; all interaction arrives
 as `Event`s from the loop (§6).
