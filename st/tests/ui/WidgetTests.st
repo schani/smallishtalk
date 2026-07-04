@@ -82,6 +82,70 @@ testMenuPaneResolvesCommandAtPoint
 	self assert: (m commandAtPoint: (Point x: 5 y: 2)) equals: #Accept.
 	self assert: (m commandAtPoint: (Point x: 5 y: 17)) equals: #Cancel.
 	self assert: (m commandAtPoint: (Point x: 5 y: 100)) equals: nil!
+testListPaneScrollBarScrollsWithoutSelecting
+	"a ListPane whose items overflow shows a 6-px scroll-bar strip on its
+	 right: a click in the strip jump-scrolls (topIndex from the click's
+	 fraction of the bar) without touching the selection; row clicks then
+	 select relative to the new topIndex. A pane whose items fit shows no
+	 strip and keeps the full row width."
+	| lp items f |
+	items := OrderedCollection new.
+	1 to: 10 do: [:k | items add: 'item' , k printString].
+	lp := ListPane bounds: (Rectangle left: 0 top: 0 right: 40 bottom: 32).
+	lp items: items.
+	"visibleRows = (32-2)//15 = 2, 10 items -> the strip is x[34,40)"
+	self assert: lp needsScrollBar.
+	self assert: lp contentRight equals: 34.
+	lp select: 1.
+	"click at the bar's bottom: t = 31*10//32+1 = 10, clamped to maxTop 9"
+	self assert: (lp selectAtPoint: (Point x: 36 y: 31)).
+	self assert: lp topIndex equals: 9.
+	self assert: lp selectionIndex equals: 1.
+	"a row click now selects relative to the scrolled top: row 2 = item 10"
+	self assert: (lp selectAtPoint: (Point x: 3 y: 17)).
+	self assert: lp selectedItem equals: 'item10'.
+	"click at the bar's top scrolls back"
+	self assert: (lp selectAtPoint: (Point x: 36 y: 0)).
+	self assert: lp topIndex equals: 1.
+	"the rendered strip: the bar frame's top-left corner pixel is black"
+	f := Form width: 40 height: 32.
+	lp displayOn: (Canvas on: f).
+	self assert: (f pixelValueAtX: 34 y: 0) equals: 1.
+	"no strip when the items fit"
+	lp items: (Array with: 'a' with: 'b').
+	self deny: lp needsScrollBar.
+	self assert: lp contentRight equals: 40!
+testListPaneThumbDragScrolls
+	"pressing ON the thumb grabs it without jumping; mouse moves then drag
+	 it — the pane tracks y wherever the pointer is, capture is the
+	 router's job — and mouse-up releases it, so later moves do nothing."
+	| lp items e |
+	items := OrderedCollection new.
+	1 to: 10 do: [:k | items add: 'item' , k printString].
+	lp := ListPane bounds: (Rectangle left: 0 top: 0 right: 40 bottom: 32).
+	lp items: items.
+	lp select: 1.
+	"the thumb is y[0,6): a press at y=2 grabs it, no jump"
+	e := Event fromArray: (Array with: 2 with: 36 with: 2 with: 1 with: 1).
+	self assert: (lp handleEvent: e).
+	self assert: lp topIndex equals: 1.
+	self assert: lp isDraggingThumb.
+	"drag to y=18: topIndex = (18-2)*10//32+1 = 6; selection untouched"
+	e := Event fromArray: (Array with: 1 with: 36 with: 18 with: 0 with: 0).
+	self assert: (lp handleEvent: e).
+	self assert: lp topIndex equals: 6.
+	self assert: lp selectionIndex equals: 1.
+	"dragging way past the bottom clamps to the last page"
+	e := Event fromArray: (Array with: 1 with: 10 with: 60 with: 0 with: 0).
+	lp handleEvent: e.
+	self assert: lp topIndex equals: 9.
+	"release: the next move no longer scrolls"
+	e := Event fromArray: (Array with: 2 with: 10 with: 60 with: 1 with: 0).
+	lp handleEvent: e.
+	self deny: lp isDraggingThumb.
+	e := Event fromArray: (Array with: 1 with: 36 with: 2 with: 0 with: 0).
+	self deny: (lp handleEvent: e).
+	self assert: lp topIndex equals: 9!
 testScrollBarThumbTracksPosition
 	| sb |
 	sb := ScrollBar bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 5 y: 100)).

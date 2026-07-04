@@ -578,7 +578,13 @@ extend.
   workhorse for the source pane and the workspace.
 - **`MenuPane`** — pop-up list menu (for the right-button viewer menu and the
   browser's operate menus) returning the chosen command symbol.
-- **`ScrollBar`** — thin, attaches to `ListPane`/`TextPane`.
+- **`ScrollBar`** — thin, attaches to `ListPane`/`TextPane`. `ListPane` builds
+  one in automatically when its items overflow: a 6-px strip on the right edge
+  with a proportional thumb. Pressing the thumb grabs it and mouse moves drag
+  it until release; pressing the trough jumps there first, then drags. The
+  `ClassBrowser` captures the mouse on any pane press, so a drag keeps
+  scrolling even when the pointer leaves the strip; the selection is never
+  touched by scrolling.
 
 All render through `Canvas` (§5.6) and the `StrikeFont`; all interaction arrives
 as `Event`s from the loop (§6).
@@ -622,9 +628,13 @@ Two enablers, needed before a *live* browser can exist.
   Add `SystemDictionary>>allClasses`, `classNamed:`, `classNamesDo:`,
   `organization` (→ the `SystemOrganization`).
 - **Categories & protocols** are thus a thin view over those dictionaries.
-  Milestone-pragmatic defaults: category `'Kernel'`, protocol `#unclassified`;
-  real categorization comes from build-time metadata and from
-  `compile:classified:` going forward.
+  Defaults: a class's category is its **source-declared** one — the image
+  writer records each `category:` from the class-definition chunks in a
+  `SystemClassCategories` global (an Array parallel to `SystemClassList`,
+  indexed by classIndex) and `SystemOrganization` falls back to it (then to
+  `'Kernel'`); protocol defaults to `#unclassified` until
+  `compile:classified:` files a method. Category, class, protocol, and
+  selector lists come back alphabetically sorted.
 
 ### 9.3 Live compile / accept
 ```
@@ -843,9 +853,10 @@ are the invariant we design against now.)
 4. **Source retention image growth.** Storing all kernel source enlarges the
    image; make source retention a build option and consider compressing or
    storing source out-of-line if it bites.
-5. **Category/protocol metadata.** Real class categories don't exist yet;
-   milestone starts with coarse buckets and grows them via `compile:classified:`
-   and build-time metadata. Scope creep risk — keep it minimal for M5.
+5. **Category/protocol metadata.** *(resolved)* Class categories are the
+   source-declared ones, carried through the image writer as the
+   `SystemClassCategories` table (§9.2); protocols grow via
+   `compile:classified:`.
 6. **Font licensing.** *(resolved)* The embedded strike is Adobe Helvetica
    Medium 12 from the X11 75dpi BDF collection (`st/ui/gfx/helvR12.bdf`),
    under the permissive Adobe/DEC notice embedded in the BDF; provenance is

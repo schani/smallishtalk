@@ -10,7 +10,7 @@ Object subclass: #StParser
 	instanceVariableNames: 'tokens index'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StParser class methodsFor: 'parsing'!
 parseMethod: aString

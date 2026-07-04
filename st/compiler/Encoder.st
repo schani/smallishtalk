@@ -6,7 +6,7 @@ Object subclass: #StEncoder
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StEncoder class methodsFor: 'encoding'!
 mnemonicKey: mnemonic

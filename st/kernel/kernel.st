@@ -59,85 +59,85 @@ Object subclass: #Magnitude
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Magnitudes'!
 
 Magnitude subclass: #Number
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Magnitudes'!
 
 Number subclass: #Integer
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Magnitudes'!
 
 Integer subclass: #SmallInteger
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Magnitudes'!
 
 Object subclass: #Collection
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 Collection subclass: #SequenceableCollection
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 SequenceableCollection subclass: #String
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 String subclass: #ByteString
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 ByteString subclass: #Symbol
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 SequenceableCollection subclass: #Array
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 SequenceableCollection subclass: #ByteArray
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 SequenceableCollection subclass: #OrderedCollection
 	instanceVariableNames: 'store count'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 Collection subclass: #Dictionary
 	instanceVariableNames: 'dKeys dVals'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 Object subclass: #WriteStream
 	instanceVariableNames: 'target pos'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Streams'!
 
 Object subclass: #Character
 	instanceVariableNames: 'codePoint'
@@ -149,7 +149,7 @@ Object subclass: #Association
 	instanceVariableNames: 'key value'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Collections'!
 
 Object subclass: #Box
 	instanceVariableNames: 'boxValue'
@@ -191,103 +191,103 @@ Object subclass: #Process
 	instanceVariableNames: 'stack frameOffset pc priority nextLink myList serialCounter'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Processes'!
 
 Object subclass: #Semaphore
 	instanceVariableNames: 'excessSignals queueHead queueTail'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Processes'!
 
 Object subclass: #LinkedList
 	instanceVariableNames: 'head tail'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Processes'!
 
 Object subclass: #ProcessorScheduler
 	instanceVariableNames: 'queues activeProcess'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Processes'!
 
 Object subclass: #Stack
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'System'!
 
 Object subclass: #SystemDictionary
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'System'!
 
 Object subclass: #TranscriptStream
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Streams'!
 
 Object subclass: #Delay
 	instanceVariableNames: 'ms'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Processes'!
 
 Object subclass: #Profiler
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'System'!
 
 Object subclass: #ExRetryToken
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Exceptions'!
 
 Object subclass: #Exception
 	instanceVariableNames: 'messageText signalOff signalSerial handlerOff handlerSerial'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Exceptions'!
 
 Exception subclass: #Error
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Exceptions'!
 
 Error subclass: #ZeroDivide
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Exceptions'!
 
 Error subclass: #ArithmeticOverflow
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Exceptions'!
 
 Error subclass: #MessageNotUnderstood
 	instanceVariableNames: 'message receiver'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Exceptions'!
 
 Error subclass: #BlockCannotReturn
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Exceptions'!
 
 Error subclass: #ModificationForbidden
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Kernel'!
+	category: 'Exceptions'!
 
 !Object methodsFor: 'comparing'!
 == other
@@ -941,6 +941,19 @@ do: aBlock separatedBy: sepBlock
 		i := i + 1]!
 species
 	^OrderedCollection!
+sort: aBlock
+	"in-place stable insertion sort; aBlock answers true when its first
+	 argument must precede its second"
+	| i j v |
+	i := 2.
+	[i <= count] whileTrue: [
+		v := store at: i.
+		j := i - 1.
+		[j >= 1 and: [aBlock value: v value: (store at: j)]] whileTrue: [
+			store at: j + 1 put: (store at: j).
+			j := j - 1].
+		store at: j + 1 put: v.
+		i := i + 1]!
 copyFrom: start to: stop
 	| r i |
 	r := OrderedCollection new.

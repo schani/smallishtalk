@@ -434,7 +434,7 @@ pub fn treaty_st_source() -> String {
          \tinstanceVariableNames: ''\n\
          \tclassVariableNames: ''\n\
          \tpoolDictionaries: ''\n\
-         \tcategory: 'Smallishtalk-Compiler'!\n\n\
+         \tcategory: 'Compiler'!\n\n\
          !Treaty class methodsFor: 'constants'!\n",
     );
     for (group, name, value) in all_constants() {

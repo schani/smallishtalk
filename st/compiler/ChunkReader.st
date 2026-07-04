@@ -15,7 +15,7 @@ Object subclass: #StChunkReader
 	instanceVariableNames: 'source bytes pos'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StChunkReader class methodsFor: 'reading'!
 eventsFrom: aString

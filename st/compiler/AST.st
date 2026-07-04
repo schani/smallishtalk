@@ -13,7 +13,7 @@ Object subclass: #StCharCode
 	instanceVariableNames: 'code'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StCharCode class methodsFor: 'instance creation'!
 code: anInteger
@@ -38,7 +38,7 @@ Object subclass: #StNode
 	instanceVariableNames: ''
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StNode methodsFor: 'printing'!
 sexp
@@ -50,7 +50,7 @@ StNode subclass: #StMethodNode
 	instanceVariableNames: 'selector arguments temporaries pragmas statements'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StMethodNode methodsFor: 'accessing'!
 selector ^selector!
@@ -83,7 +83,7 @@ StNode subclass: #StPragmaNode
 	instanceVariableNames: 'selector arguments'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StPragmaNode methodsFor: 'accessing'!
 selector ^selector!
@@ -104,7 +104,7 @@ StNode subclass: #StReturnNode
 	instanceVariableNames: 'expression'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StReturnNode methodsFor: 'accessing'!
 expression ^expression!
@@ -118,7 +118,7 @@ StNode subclass: #StAssignmentNode
 	instanceVariableNames: 'variable expression'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StAssignmentNode methodsFor: 'accessing'!
 variable ^variable!
@@ -134,7 +134,7 @@ StNode subclass: #StVariableNode
 	instanceVariableNames: 'name'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StVariableNode methodsFor: 'accessing'!
 name ^name!
@@ -148,7 +148,7 @@ StNode subclass: #StLiteralNode
 	instanceVariableNames: 'value kind'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 "kind is one of: #integer #string #symbol #character #array #byteArray"
 
@@ -194,7 +194,7 @@ StNode subclass: #StMessageNode
 	instanceVariableNames: 'receiver selector arguments'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StMessageNode methodsFor: 'accessing'!
 receiver ^receiver!
@@ -222,7 +222,7 @@ StNode subclass: #StCascadeNode
 	instanceVariableNames: 'receiver messages'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 "messages: OrderedCollection of StCascadeMessage (selector + arguments),
  all sent to the same receiver value; the cascade's value is the last's."
@@ -246,7 +246,7 @@ StNode subclass: #StCascadeMessage
 	instanceVariableNames: 'selector arguments'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 !StCascadeMessage methodsFor: 'accessing'!
 selector ^selector!
@@ -267,7 +267,7 @@ StNode subclass: #StBlockNode
 	instanceVariableNames: 'arguments temporaries statements capturedNames hasNlr'
 	classVariableNames: ''
 	poolDictionaries: ''
-	category: 'Smallishtalk-Compiler'!
+	category: 'Compiler'!
 
 "capturedNames and hasNlr are filled by capture analysis (codegen phase)."
 

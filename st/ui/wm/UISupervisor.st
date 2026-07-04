@@ -50,6 +50,7 @@ pumpEvents
 		n := n + 1].
 	^n!
 dispatch: anEvent
+	| handled |
 	anEvent isClose ifTrue: [running := false. ^self].
 	anEvent isMouseMove
 		ifTrue: [
@@ -60,8 +61,12 @@ dispatch: anEvent
 		ifFalse: [
 			"buttons, keys, scroll, resize can all change what is on screen."
 			damaged := true].
-	"route buttons and keystrokes (and move) to the app view, if any."
-	rootView notNil ifTrue: [rootView handleEvent: anEvent].
+	"route buttons and keystrokes (and move) to the app view, if any. A
+	 HANDLED move changed app state (e.g. a scroll-thumb drag) and must
+	 repaint even when the OS draws the cursor."
+	rootView notNil ifTrue: [
+		handled := rootView handleEvent: anEvent.
+		handled == true ifTrue: [damaged := true]].
 	^self! !
 
 !UISupervisor methodsFor: 'the loop'!
