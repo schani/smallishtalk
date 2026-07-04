@@ -355,11 +355,17 @@ impl HostUi {
         }
         for key in &keys {
             if !self.last_keys.contains(key) {
-                // Editing keys never reach the char callback, so translate
-                // them here into the control codes TextPane understands.
+                // Editing/navigation keys never reach the char callback, so
+                // translate them here into the control codes TextPane
+                // understands (8/10 backspace/enter; 28-31 are the classic
+                // Smalltalk left/right/up/down arrow codes).
                 let ch = match key {
                     minifb::Key::Backspace => 8,
                     minifb::Key::Enter => 10,
+                    minifb::Key::Left => 28,
+                    minifb::Key::Right => 29,
+                    minifb::Key::Up => 30,
+                    minifb::Key::Down => 31,
                     _ => 0,
                 };
                 self.events.push_back([EV_KEY_DOWN, *key as i64, 0, ch, 0]);
@@ -367,9 +373,12 @@ impl HostUi {
         }
         self.last_keys = keys;
         for ch in chars {
-            // Printables only: control chars (some platforms do send them
-            // here) are covered by the key path above.
-            if ch >= 32 && ch != 127 {
+            // Text only. Control chars (some platforms do send them here)
+            // are covered by the key path above, and U+F700-F8FF is Apple's
+            // private-use encoding of function/arrow keys, which macOS
+            // reports as [event characters] and minifb forwards verbatim —
+            // keys, not text.
+            if ch >= 32 && ch != 127 && !(0xF700..=0xF8FF).contains(&ch) {
                 self.events.push_back([EV_KEY_DOWN, 0, 0, ch as i64, 0]);
             }
         }
@@ -490,6 +499,55 @@ mod tests {
                 [EV_MOUSE_MOVE, 0, 0, 0, 0],
                 [EV_KEY_DOWN, Key::Backspace as i64, 0, 8, 0],
                 [EV_KEY_DOWN, Key::Enter as i64, 0, 10, 0],
+            ]
+        );
+    }
+
+    /// macOS reports arrow/function/navigation keys as fake "characters" in
+    /// the Unicode private-use area (U+F700–U+F8FF, e.g. left arrow =
+    /// U+F702 = NSLeftArrowFunctionKey) and minifb's char callback forwards
+    /// them verbatim. They are keys, not text: letting one through crashed
+    /// the Workspace (option-left → insert 0xF702 into a byte String).
+    #[test]
+    fn mac_function_key_chars_are_dropped() {
+        let mut ui = HostUi::new();
+        ui.ingest_window_state(
+            true,
+            false,
+            Some((0, 0)),
+            false,
+            false,
+            vec![],
+            vec![0xF700, 0xF702, 0xF8FF, 97],
+        );
+        assert_eq!(
+            drain(&mut ui),
+            vec![[EV_MOUSE_MOVE, 0, 0, 0, 0], [EV_KEY_DOWN, 0, 0, 97, 0]]
+        );
+    }
+
+    /// Arrow keys ride the key path (like backspace/enter) as the classic
+    /// Smalltalk control codes 28–31, so TextPane can navigate on them.
+    #[test]
+    fn arrow_keys_carry_the_classic_control_codes() {
+        let mut ui = HostUi::new();
+        ui.ingest_window_state(
+            true,
+            false,
+            Some((0, 0)),
+            false,
+            false,
+            vec![Key::Left, Key::Right, Key::Up, Key::Down],
+            vec![],
+        );
+        assert_eq!(
+            drain(&mut ui),
+            vec![
+                [EV_MOUSE_MOVE, 0, 0, 0, 0],
+                [EV_KEY_DOWN, Key::Left as i64, 0, 28, 0],
+                [EV_KEY_DOWN, Key::Right as i64, 0, 29, 0],
+                [EV_KEY_DOWN, Key::Up as i64, 0, 30, 0],
+                [EV_KEY_DOWN, Key::Down as i64, 0, 31, 0],
             ]
         );
     }

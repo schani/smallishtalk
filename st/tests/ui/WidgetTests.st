@@ -36,6 +36,38 @@ testTextPaneEditingSelectionAndClipboard
 	self assert: tp contents equals: 'abcd'.
 	tp backspace.
 	self assert: tp contents equals: 'abc'!
+testTextPaneIgnoresUnrepresentableCharacters
+	"a String is a byte object: a key event carrying a code point it cannot
+	 hold (e.g. a macOS function key leaking through as U+F702) must be
+	 ignored — not crash insertCharacter (the option-left regression)."
+	| tp e |
+	tp := TextPane bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 100 y: 40)).
+	tp contents: 'ab'.
+	tp caretAt: 2.
+	e := Event fromArray: (Array with: 3 with: 0 with: 0 with: 63234 with: 0).
+	self deny: (tp handleEvent: e).
+	self assert: tp contents equals: 'ab'.
+	"255 is the last storable byte and must still insert"
+	tp handleEvent: (Event fromArray: (Array with: 3 with: 0 with: 0 with: 255 with: 0)).
+	self assert: tp contents size equals: 3!
+testTextPaneArrowKeysMoveTheCaret
+	"the classic control codes 28 (left) / 29 (right) — what the host sends
+	 for the arrow keys — move the caret, clamped at the buffer's ends."
+	| tp left right |
+	tp := TextPane bounds: (Rectangle origin: (Point x: 0 y: 0) corner: (Point x: 100 y: 40)).
+	tp contents: 'ab'.
+	tp caretAt: 1.
+	left := Event fromArray: (Array with: 3 with: 0 with: 0 with: 28 with: 0).
+	right := Event fromArray: (Array with: 3 with: 0 with: 0 with: 29 with: 0).
+	self assert: (tp handleEvent: right).
+	self assert: tp selectionStart equals: 2.
+	self assert: (tp handleEvent: right).
+	self assert: tp selectionStart equals: 2.
+	tp handleEvent: left.
+	tp handleEvent: left.
+	self assert: tp selectionStart equals: 0.
+	tp handleEvent: left.
+	self assert: tp selectionStart equals: 0!
 testTextPaneSelectRangeLandsOnAToken
 	"the compile-error interaction (UI.md §10.2): set the selection to the
 	 offending token's range so the caret lands on it."

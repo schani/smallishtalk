@@ -206,10 +206,17 @@ handleEvent: anEvent
 	anEvent isMouseUp ifTrue: [dragAnchor := nil. ^false].
 	^false!
 handleKey: anEvent
+	"insert only what a byte String can hold (32..255, and 10 for a line
+	 break) — anything else (e.g. a code point > 255) must be ignored, not
+	 crash the store. 8 is backspace; 28/29 are the classic left/right
+	 arrow control codes the host translates arrow keys to."
 	| code |
 	code := anEvent keyCharacter value.
 	code = 8 ifTrue: [self backspace. ^true].
-	(code >= 32 or: [code = 10]) ifTrue: [self insertCharacter: code. ^true].
+	code = 28 ifTrue: [self moveLeft. ^true].
+	code = 29 ifTrue: [self moveRight. ^true].
+	code = 10 ifTrue: [self insertCharacter: code. ^true].
+	(code >= 32 and: [code <= 255]) ifTrue: [self insertCharacter: code. ^true].
 	^false!
 beginSelectionAt: aPoint
 	(self containsPoint: aPoint) ifFalse: [^false].

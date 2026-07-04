@@ -723,9 +723,15 @@ class-side vs instance-side switch. Data comes entirely from §9's reflection AP
   replaces it. The host feeds the gestures: `src/host_ui.rs` reports the
   right button as button 2 (event slot `c`) with the same edge-only
   discipline as the left, and typed characters via minifb's input callback
-  as key events carrying the character in slot `c` (backspace/enter are
-  translated from raw keys to codes 8/10). Tested end-to-end through the
-  posted-event pipeline in `st/tests/ui/WorkspaceTests.st`.
+  as key events carrying the character in slot `c` (backspace/enter/arrows
+  are translated from raw keys to the classic control codes 8/10/28–31;
+  macOS function-key pseudo-characters U+F700–F8FF are filtered — they are
+  keys, not text). `TextPane` inserts only what a byte `String` can hold
+  (32..255 and 10) and navigates on 28/29, and the kernel's `at:put:`
+  primitive-failure fallback diagnoses improper stores instead of raising
+  a bogus `MessageNotUnderstood`. Tested end-to-end through the
+  posted-event pipeline in `st/tests/ui/WorkspaceTests.st` (plus
+  `KernelTests`/`WidgetTests` for the guards).
 
 ---
 

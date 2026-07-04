@@ -74,7 +74,14 @@ testTypingThroughTheEventQueue
 	Event postType: 3 a: 0 b: 0 c: 120 d: 0.
 	s pumpEvents.
 	self assert: w contents equals: 'h
-x'!
+x'.
+	"left arrow (control code 28, the host's translation of Key::Left)
+	 moves the caret, so the next insert lands before the x"
+	Event postType: 3 a: 0 b: 0 c: 28 d: 0.
+	Event postType: 3 a: 0 b: 0 c: 121 d: 0.
+	s pumpEvents.
+	self assert: w contents equals: 'h
+yx'!
 testMouseDragSelectsText
 	"press-drag-release selects the swept range; after the release, further
 	 moves must NOT keep extending the selection."
