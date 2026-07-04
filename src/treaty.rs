@@ -360,6 +360,9 @@ pub const PRIM_PIXEL_BLIT: u16 = 331;
 pub const PRIM_BITBLT: u16 = 332;
 /// Save a Form to a PNG file — screenshots for operability (UI.md §4.4).
 pub const PRIM_SAVE_FORM: u16 = 333;
+/// Push a scripted event onto the host queue — lets in-image tests drive
+/// the event pipeline exactly as a real device would (UI.md §4.2, §12).
+pub const PRIM_POST_EVENT: u16 = 334;
 pub const PRIM_SNAPSHOT: u16 = 400;
 pub const PRIM_REGISTER_CLASS: u16 = 401;
 pub const PRIM_METHOD_INSTALL: u16 = 402;
@@ -546,6 +549,7 @@ pub fn all_constants() -> Vec<(&'static str, &'static str, u64)> {
             PRIM_CLOCK_MONOTONIC_MS, PRIM_CLOCK_WALL_MS, PRIM_SIGNAL_AT_MS,
             PRIM_CLOCK_MONOTONIC_NS,
             PRIM_NEXT_EVENT, PRIM_PIXEL_BLIT, PRIM_BITBLT, PRIM_SAVE_FORM,
+            PRIM_POST_EVENT,
             PRIM_SNAPSHOT, PRIM_REGISTER_CLASS,
             PRIM_METHOD_INSTALL, PRIM_FLUSH_CACHES, PRIM_FRAME_INFO,
             PRIM_PROFILER_START, PRIM_PROFILER_STOP, PRIM_PROFILER_REPORT,

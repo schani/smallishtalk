@@ -11,13 +11,16 @@ image (see `docs/class-browser-demo.png`). It is the UI counterpart to `SPEC.md`
 and `JIT.md`.
 
 > **Implementation note.** All layers L0–L5 are in place: the host seam
-> (`src/host_ui.rs`, `src/png.rs`, primitives 323/330–333), the graphics kernel
+> (`src/host_ui.rs`, `src/png.rs`, primitives 323/330–334), the graphics kernel
 > (`st/ui/gfx/`), the tiling WM (`st/ui/wm/`), the widget toolkit
 > (`st/ui/widgets/`), reflection + runtime compilation (`st/ui/kernel/`), and the
 > apps (`st/ui/apps/`). Live "accept" works via an in-image runtime reifier
-> (`RuntimeCompiler`) over `PRIM_METHOD_INSTALL`. Tests: `tests/ui_headless.rs`,
-> `tests/ui_gfx.rs`, `tests/ui_wm.rs`, `tests/ui_widgets.rs`,
-> `tests/ui_reflection.rs`, `tests/ui_browser.rs`, `tests/live_install_test.rs`.
+> (`RuntimeCompiler`) over `PRIM_METHOD_INSTALL`. Tests: the host seam in
+> `tests/ui_headless.rs` and `tests/live_install_test.rs`; everything above it
+> as **in-image Smalltalk tests** — `st/tests/ui/` (graphics, WM, widgets,
+> reflection, browser suites on a minimal in-image SUnit), launched by
+> `tests/st_suite.rs`. Scripted input reaches the real event pipeline through
+> `primPostEvent` (334).
 > One deviation from the plan: live compilation required the compiler filed into
 > the image and `CompiledMethod`/`CompiledBlock` to declare their real ivars.
 
@@ -282,6 +285,12 @@ minifb; headless: pull from the scripted queue, §4A), **then** pops the oldest
 ```
 Returning `nil` on empty preserves the current stubbed contract, so existing
 callers that expect "empty → nil" keep working.
+
+The write side of the same queue is `primPostEvent` (334): push one scripted
+`type a b c d` event exactly as a real device would enqueue it. That is what
+lets the **in-image test suite** (`st/tests/ui/`) drive `pumpEvents` —
+clicks, moves, close — with no host-side cooperation
+(`Event postType:a:b:c:d:`).
 
 ### 4.3 `primBitBlt` (332) — the workhorse (NEW primitive number)
 The one piece of drawing that lives in Rust, for speed — exactly as Smalltalk-80
@@ -762,8 +771,9 @@ comparison), **layered** (unit → model → pixel → perf → persistence), an
    early one.)
 
 **Execution**
-- `cargo test` runs 1–6 headless with **no `ui` feature and no crates**.
-- `run-st-tests.sh` runs the SUnit UI suites (Phase 2).
+- `cargo test` runs 1–6 headless with **no `ui` feature and no crates**; the
+  UI scenarios themselves are in-image Smalltalk tests (`st/tests/ui/`, run
+  by the in-image `TestRunner`, launched by `tests/st_suite.rs`).
 - Windowed smoke (`cargo run --features ui -- --ui image.im`) is manual and
   always wrapped in `timeout` (project rule); it is never required for CI.
 - Every scenario is committed, so it doubles as living documentation and a repro.

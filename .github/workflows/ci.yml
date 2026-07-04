@@ -1,0 +1,27 @@
+# Run the full test suite (`make test`) on every push to main and every PR:
+# the Rust/VM tests, the in-image Smalltalk suite, the bootstrap fixpoint,
+# and the GST-hosted compiler suites.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Pinned to ubuntu-22.04 (jammy), NOT ubuntu-latest: the tests need the
+    # GNU Smalltalk 3.2.5 cross-compiler, and the gnu-smalltalk package was
+    # dropped from Debian/Ubuntu after jammy.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GNU Smalltalk
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnu-smalltalk
+          gst --version
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+      - name: Run all tests
+        run: make test

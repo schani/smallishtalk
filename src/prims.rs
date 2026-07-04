@@ -273,6 +273,21 @@ impl Vm {
             // primNextEvent (UI.md §4.2): harvest from the host, then pop the
             // oldest event; empty → nil (preserves the pre-UI stub contract).
             PRIM_NEXT_EVENT => self.prim_next_event(regs),
+            // primPostEvent (UI.md §12): push a scripted `type a b c d` event
+            // onto the host queue, so in-image tests drive the same pipeline
+            // real devices feed.
+            PRIM_POST_EVENT => {
+                let mut ev = [0i64; 5];
+                for (i, slot) in ev.iter_mut().enumerate() {
+                    let v = self.get(regs, r + 1 + i as u8);
+                    if !v.is_int() {
+                        return Ok(PrimOutcome::Fail(FAIL_WRONG_TYPE));
+                    }
+                    *slot = v.as_int();
+                }
+                self.host.push_event(ev);
+                Ok(PrimOutcome::Value(self.get(regs, r)))
+            }
             // The clocks route through the host TimeSource so headless runs are
             // deterministic under the virtual clock (UI.md §4A.1).
             PRIM_CLOCK_MONOTONIC_MS => Ok(PrimOutcome::Value(Value::from_int(
